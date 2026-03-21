@@ -134,4 +134,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // ExifInterface — fix libjpeg error 122 on Samsung/CameraX JPEG rotation
+    implementation(libs.exifinterface)
 }

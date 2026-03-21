@@ -178,11 +178,57 @@ class ProductRepositoryImpl @Inject constructor(
     private fun loadBitmap(imageUri: String): android.graphics.Bitmap? {
         return try {
             val uri = Uri.parse(imageUri)
-            when (uri.scheme) {
-                "file"    -> BitmapFactory.decodeFile(uri.path)
-                "content" -> context.contentResolver
-                    .openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-                else      -> BitmapFactory.decodeFile(imageUri)
+            val filePath = when (uri.scheme) {
+                "file" -> uri.path ?: return null
+                "content" -> {
+                    // For content URIs decode via stream — no rotation fix needed
+                    return context.contentResolver
+                        .openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                }
+                else -> imageUri
+            }
+
+            // Decode with inJustDecodeBounds first to get dimensions, then subsample if huge
+            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(filePath, opts)
+            val rawW = opts.outWidth
+            val rawH = opts.outHeight
+            val sampleSize = if (rawW > 1024 || rawH > 1024) {
+                maxOf(rawW / 1024, rawH / 1024)
+            } else 1
+
+            val decodeOpts = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+            }
+
+            // Use ExifInterface to read rotation — avoids libjpeg error 122 on Samsung devices
+            val exifDegrees = try {
+                val exif = androidx.exifinterface.media.ExifInterface(filePath)
+                when (exif.getAttributeInt(
+                    androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                    androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+                )) {
+                    androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                    androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                    androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                    else -> 0
+                }
+            } catch (e: Exception) { 0 }
+
+            // Decode via FileInputStream to avoid strict-mode JPEG parser
+            val bitmap = java.io.FileInputStream(filePath).use {
+                BitmapFactory.decodeStream(it, null, decodeOpts)
+            } ?: return null
+
+            // Apply rotation if needed
+            if (exifDegrees != 0) {
+                val matrix = android.graphics.Matrix().apply { postRotate(exifDegrees.toFloat()) }
+                android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            } else {
+                bitmap
+            }.also {
+                Log.d(TAG, "loadBitmap: decoded ${it.width}x${it.height} rotation=$exifDegrees°")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not load bitmap for TFLite: ${e.message}")
