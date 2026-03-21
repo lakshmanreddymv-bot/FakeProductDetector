@@ -2,6 +2,7 @@ package com.example.fakeproductdetector.domain.usecase
 
 import com.example.fakeproductdetector.domain.model.*
 import com.example.fakeproductdetector.domain.repository.ProductRepository
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -54,9 +55,10 @@ class ScanProductUseCaseTest {
     @Test
     fun `invoke emits result when repository succeeds`() = runTest {
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(flowOf(authenticResult))
+            .thenReturn(flowOf(ScanEvent.Result(authenticResult)))
 
-        val result = useCase("content://image", "300450122377", Category.MEDICINE).first()
+        val result = useCase("content://image", "300450122377", Category.MEDICINE)
+            .filterIsInstance<ScanEvent.Result>().first().scanResult
 
         assertEquals(Verdict.AUTHENTIC, result.verdict)
         assertEquals(95f, result.authenticityScore)
@@ -79,9 +81,10 @@ class ScanProductUseCaseTest {
     @Test
     fun `invoke emits LIKELY_FAKE verdict when product is counterfeit`() = runTest {
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(flowOf(fakeResult))
+            .thenReturn(flowOf(ScanEvent.Result(fakeResult)))
 
-        val result = useCase("content://image", "111", Category.LUXURY).first()
+        val result = useCase("content://image", "111", Category.LUXURY)
+            .filterIsInstance<ScanEvent.Result>().first().scanResult
 
         assertEquals(Verdict.LIKELY_FAKE, result.verdict)
         assertEquals(2, result.redFlags.size)
@@ -90,9 +93,10 @@ class ScanProductUseCaseTest {
     @Test
     fun `invoke delegates imageUri to repository correctly`() = runTest {
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(flowOf(authenticResult))
+            .thenReturn(flowOf(ScanEvent.Result(authenticResult)))
 
-        useCase("content://specific_image", "123", Category.FOOD).first()
+        useCase("content://specific_image", "123", Category.FOOD)
+            .filterIsInstance<ScanEvent.Result>().first()
 
         verify(mockRepository).scanProduct("content://specific_image", "123", Category.FOOD)
     }
@@ -100,9 +104,10 @@ class ScanProductUseCaseTest {
     @Test
     fun `invoke with null barcode still calls repository`() = runTest {
         whenever(mockRepository.scanProduct(any(), isNull(), any()))
-            .thenReturn(flowOf(authenticResult))
+            .thenReturn(flowOf(ScanEvent.Result(authenticResult)))
 
-        val result = useCase("content://image", null, Category.OTHER).first()
+        val result = useCase("content://image", null, Category.OTHER)
+            .filterIsInstance<ScanEvent.Result>().first().scanResult
 
         assertEquals(Verdict.AUTHENTIC, result.verdict)
         verify(mockRepository).scanProduct("content://image", null, Category.OTHER)
@@ -116,11 +121,28 @@ class ScanProductUseCaseTest {
             redFlags = listOf("Packaging slightly off")
         )
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(flowOf(suspiciousResult))
+            .thenReturn(flowOf(ScanEvent.Result(suspiciousResult)))
 
-        val result = useCase("content://image", "999", Category.ELECTRONICS).first()
+        val result = useCase("content://image", "999", Category.ELECTRONICS)
+            .filterIsInstance<ScanEvent.Result>().first().scanResult
 
         assertEquals(Verdict.SUSPICIOUS, result.verdict)
         assertEquals(55f, result.authenticityScore)
+    }
+
+    @Test
+    fun `invoke passes through Progress events before Result`() = runTest {
+        val events = listOf(
+            ScanEvent.Progress("Analyzing with Gemini…"),
+            ScanEvent.Progress("Verifying with Claude…"),
+            ScanEvent.Result(authenticResult)
+        )
+        whenever(mockRepository.scanProduct(any(), any(), any()))
+            .thenReturn(flowOf(*events.toTypedArray()))
+
+        val result = useCase("content://image", "123", Category.MEDICINE)
+            .filterIsInstance<ScanEvent.Result>().first().scanResult
+
+        assertEquals(Verdict.AUTHENTIC, result.verdict)
     }
 }

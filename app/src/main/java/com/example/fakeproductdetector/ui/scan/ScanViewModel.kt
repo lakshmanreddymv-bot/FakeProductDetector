@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.fakeproductdetector.data.api.GeminiQuotaError
 import com.example.fakeproductdetector.domain.model.Category
+import com.example.fakeproductdetector.domain.model.ScanEvent
 import com.example.fakeproductdetector.domain.usecase.ScanProductUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -35,7 +36,7 @@ class ScanViewModel @Inject constructor(
         isScanning = true
 
         viewModelScope.launch {
-            _uiState.value = ScanUiState.Loading("Analyzing with Gemini Vision…")
+            _uiState.value = ScanUiState.Loading("Pre-scanning on device…")
             scanProductUseCase(imageUri, barcode, category)
                 .catch { e ->
                     isScanning = false
@@ -74,9 +75,14 @@ class ScanViewModel @Inject constructor(
                         )
                     }
                 }
-                .collect { result ->
-                    isScanning = false
-                    _uiState.value = ScanUiState.Success(result)
+                .collect { event ->
+                    when (event) {
+                        is ScanEvent.Progress -> _uiState.value = ScanUiState.Loading(event.message)
+                        is ScanEvent.Result   -> {
+                            isScanning = false
+                            _uiState.value = ScanUiState.Success(event.scanResult)
+                        }
+                    }
                 }
         }
     }

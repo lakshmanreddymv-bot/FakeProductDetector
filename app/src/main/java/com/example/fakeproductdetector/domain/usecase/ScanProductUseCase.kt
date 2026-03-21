@@ -1,7 +1,7 @@
 package com.example.fakeproductdetector.domain.usecase
 
 import com.example.fakeproductdetector.domain.model.Category
-import com.example.fakeproductdetector.domain.model.ScanResult
+import com.example.fakeproductdetector.domain.model.ScanEvent
 import com.example.fakeproductdetector.domain.repository.ProductRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -13,5 +13,5 @@ class ScanProductUseCase @Inject constructor(
         imageUri: String,
         barcode: String?,
         category: Category
-    ): Flow<ScanResult> = repository.scanProduct(imageUri, barcode, category)
+    ): Flow<ScanEvent> = repository.scanProduct(imageUri, barcode, category)
 }

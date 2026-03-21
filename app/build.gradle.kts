@@ -48,6 +48,9 @@ android {
     testOptions {
         unitTests { isReturnDefaultValues = true }
     }
+    aaptOptions {
+        noCompress += "tflite"
+    }
 }
 
 kotlin {
@@ -105,6 +108,10 @@ dependencies {
 
     // Accompanist Permissions
     implementation(libs.accompanist.permissions)
+
+    // TFLite
+    implementation(libs.tflite)
+    implementation(libs.tflite.support)
 
     // Coroutines
     implementation(libs.coroutines.android)

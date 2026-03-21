@@ -1,14 +1,18 @@
 package com.example.fakeproductdetector.data.repository
 
-import android.util.Log
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Log
 import com.example.fakeproductdetector.data.api.ClaudeVerificationApiImpl
 import com.example.fakeproductdetector.data.api.GeminiVisionApiImpl
 import com.example.fakeproductdetector.data.local.ScanDao
 import com.example.fakeproductdetector.data.local.ScanEntity
+import com.example.fakeproductdetector.data.ml.ProductClassifier
+import com.example.fakeproductdetector.data.ml.ProductClassifierInterface
 import com.example.fakeproductdetector.domain.model.Category
 import com.example.fakeproductdetector.domain.model.Product
+import com.example.fakeproductdetector.domain.model.ScanEvent
 import com.example.fakeproductdetector.domain.model.ScanResult
 import com.example.fakeproductdetector.domain.model.Verdict
 import com.example.fakeproductdetector.domain.repository.ProductRepository
@@ -30,8 +34,15 @@ import javax.inject.Singleton
  *
  * We only retry on transient network errors (not rate limits).
  */
-private const val MAX_NETWORK_RETRIES = 1      // 1 retry for network errors only
+private const val MAX_NETWORK_RETRIES = 1
 private const val NETWORK_RETRY_DELAY_MS = 3_000L
+
+// TFLite confidence thresholds for bypassing the cloud pipeline.
+// The model outputs fake-probability in [0, 1]:
+//   score < 0.05 → ≥95% confident AUTHENTIC → skip Gemini
+//   score > 0.90 → ≥90% confident LIKELY_FAKE → skip Gemini
+private const val TFLITE_AUTHENTIC_THRESHOLD = 0.05f
+private const val TFLITE_FAKE_THRESHOLD = 0.90f
 
 internal fun Exception.isRateLimit() =
     message?.contains("429") == true ||
@@ -49,7 +60,6 @@ private suspend fun <T> withRetry(block: suspend () -> T): T {
         try {
             return block()
         } catch (e: Exception) {
-            // Rate limit or quota — surface IMMEDIATELY, no retry
             if (e.isRateLimit()) throw e
             attempt++
             if (attempt >= MAX_NETWORK_RETRIES) throw e
@@ -63,6 +73,7 @@ class ProductRepositoryImpl @Inject constructor(
     private val scanDao: ScanDao,
     private val geminiApi: GeminiVisionApiImpl,
     private val claudeApi: ClaudeVerificationApiImpl,
+    private val classifier: ProductClassifierInterface,
     @ApplicationContext private val context: Context
 ) : ProductRepository {
 
@@ -72,10 +83,25 @@ class ProductRepositoryImpl @Inject constructor(
         imageUri: String,
         barcode: String?,
         category: Category
-    ): Flow<ScanResult> = flow {
+    ): Flow<ScanEvent> = flow {
 
-        // ── Layer 1: Gemini Vision ─────────────────────────────────────────
-        Log.d(TAG, "Starting Gemini scan — imageUri: $imageUri, category: $category")
+        // ── Step 1: TFLite pre-scan (offline, instant, free) ──────────────
+        val bitmap = loadBitmap(imageUri)
+        val tfliteScore = bitmap?.let { classifier.classify(it) } ?: ProductClassifier.NEUTRAL_SCORE
+        Log.d(TAG, "TFLite score: $tfliteScore")
+
+        if (tfliteScore < TFLITE_AUTHENTIC_THRESHOLD || tfliteScore > TFLITE_FAKE_THRESHOLD) {
+            val verdict = ProductClassifier.scoreToVerdict(tfliteScore)
+            Log.d(TAG, "TFLite high-confidence ($tfliteScore) — skipping cloud, verdict: $verdict")
+            val result = buildTfliteResult(imageUri, barcode, category, tfliteScore, verdict)
+            scanDao.insertScan(result.toEntity())
+            emit(ScanEvent.Result(result))
+            return@flow
+        }
+
+        // ── Step 2: Gemini Vision (only when TFLite is uncertain) ──────────
+        Log.d(TAG, "TFLite uncertain ($tfliteScore) — proceeding to Gemini")
+        emit(ScanEvent.Progress("Analyzing with Gemini…"))
         val geminiAnalysis = try {
             withRetry { geminiApi.analyze(imageUri, category) }
         } catch (e: Exception) {
@@ -93,8 +119,8 @@ class ProductRepositoryImpl @Inject constructor(
             scannedAt = System.currentTimeMillis()
         )
 
-        // ── Layer 2: Claude cross-verification ────────────────────────────
-        Log.d(TAG, "Starting Claude verification…")
+        // ── Step 3: Claude cross-verification (only when Gemini runs) ──────
+        emit(ScanEvent.Progress("Verifying with Claude…"))
         val scanResult = try {
             withRetry { claudeApi.verify(geminiAnalysis, product) }.also {
                 Log.d(TAG, "Claude SUCCESS — final score: ${it.authenticityScore}, verdict: ${it.verdict}")
@@ -113,7 +139,7 @@ class ProductRepositoryImpl @Inject constructor(
         }
 
         scanDao.insertScan(scanResult.toEntity())
-        emit(scanResult)
+        emit(ScanEvent.Result(scanResult))
     }
 
     override fun getScanHistory(): Flow<List<ScanResult>> =
@@ -126,6 +152,45 @@ class ProductRepositoryImpl @Inject constructor(
         val entity = scanDao.getScanByIdOnce(id)
         scanDao.deleteScan(id)
         entity?.let { deleteLocalImage(it.product.imageUri) }
+    }
+
+    private fun loadBitmap(imageUri: String): android.graphics.Bitmap? =
+        try {
+            context.contentResolver.openInputStream(Uri.parse(imageUri))
+                ?.use { BitmapFactory.decodeStream(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not load bitmap for TFLite: ${e.message}")
+            null
+        }
+
+    private fun buildTfliteResult(
+        imageUri: String,
+        barcode: String?,
+        category: Category,
+        score: Float,
+        verdict: Verdict
+    ): ScanResult {
+        // Authenticity score: (1 - fake_probability) * 100 so 0=fake, 100=authentic
+        val authenticityScore = (1f - score) * 100f
+        val confidence = if (verdict == Verdict.AUTHENTIC) 1f - score else score
+        val product = Product(
+            id = UUID.randomUUID().toString(),
+            name = category.name.lowercase().replaceFirstChar { it.uppercase() } + " Product",
+            barcode = barcode,
+            imageUri = imageUri,
+            category = category,
+            scannedAt = System.currentTimeMillis()
+        )
+        return ScanResult(
+            id = UUID.randomUUID().toString(),
+            product = product,
+            authenticityScore = authenticityScore,
+            verdict = verdict,
+            redFlags = emptyList(),
+            explanation = "On-device pre-scan result (${(confidence * 100).toInt()}% confidence). " +
+                "Cloud verification was skipped.",
+            scannedAt = System.currentTimeMillis()
+        )
     }
 
     private fun deleteLocalImage(imageUri: String) {

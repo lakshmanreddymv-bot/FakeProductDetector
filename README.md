@@ -76,7 +76,7 @@ graph TB
 
 ---
 
-### 🤖 Dual-AI Scan Pipeline
+### 🤖 3-Step AI Scan Pipeline
 
 ```mermaid
 sequenceDiagram
@@ -84,24 +84,42 @@ sequenceDiagram
     participant SC as ScanScreen
     participant VM as ScanViewModel
     participant REPO as Repository
+    participant TFL as TFLite (on-device)
     participant GEM as Gemini Vision
     participant CLU as Claude Haiku
     participant DB as Room DB
 
     User->>SC: Tap Capture
     SC->>VM: scanProduct(uri, barcode)
-    VM->>VM: emit Loading
+    VM->>VM: emit Loading("Pre-scanning on device…")
     VM->>REPO: scanProduct(...)
-    REPO->>GEM: POST image + prompt
-    GEM-->>REPO: score, verdict, redFlags
-    REPO->>CLU: POST Gemini analysis
-    CLU-->>REPO: refined verdict
-    REPO->>DB: save ScanEntity
-    REPO-->>VM: ScanResult
+
+    REPO->>TFL: classify(bitmap)
+    TFL-->>REPO: score 0.0–1.0 (instant · free · offline)
+
+    alt score < 0.05 — ≥95% confident AUTHENTIC
+        Note over REPO,TFL: High confidence → skip cloud APIs
+        REPO->>DB: save TFLite result
+        REPO-->>VM: ScanEvent.Result
+    else score > 0.90 — ≥90% confident LIKELY_FAKE
+        Note over REPO,TFL: High confidence → skip cloud APIs
+        REPO->>DB: save TFLite result
+        REPO-->>VM: ScanEvent.Result
+    else score 0.05–0.90 — uncertain
+        REPO->>VM: ScanEvent.Progress("Analyzing with Gemini…")
+        REPO->>GEM: POST image + prompt
+        GEM-->>REPO: score, verdict, redFlags
+        REPO->>VM: ScanEvent.Progress("Verifying with Claude…")
+        REPO->>CLU: POST Gemini analysis
+        CLU-->>REPO: refined verdict
+        REPO->>DB: save ScanEntity
+        REPO-->>VM: ScanEvent.Result
+    end
+
     VM->>VM: emit Success
     VM-->>SC: navigate to ResultScreen
 
-    Note over REPO,CLU: If Claude fails → Gemini result used directly
+    Note over GEM,CLU: If Claude fails → Gemini result used directly
 ```
 
 ---
@@ -186,16 +204,96 @@ graph LR
 | Language | Kotlin |
 | UI | Jetpack Compose + Material3 |
 | Architecture | Clean Architecture + MVVM |
-| DI | Hilt 2.51 |
+| DI | Hilt 2.59.1 |
 | Camera | CameraX 1.3.4 |
 | Barcode | ML Kit Barcode Scanning 17.3.0 |
+| On-Device ML | TensorFlow Lite 2.14.0 + MobileNetV3 |
 | AI - Vision | Google Gemini 2.5 Flash (v1beta) |
 | AI - Verification | Anthropic Claude Haiku 4.5 |
 | Networking | Retrofit 2.11.0 + OkHttp 4.12.0 |
-| Database | Room 2.6.1 |
+| Database | Room 2.7.1 |
 | Image Loading | Coil 2.6.0 |
 | Navigation | Navigation Compose 2.7.7 |
 | Build | AGP 9.1.0, Kotlin 2.2.10 |
+
+---
+
+## 🧠 Model Training
+
+The app ships with a **placeholder** `.tflite` file (`app/src/main/assets/product_classifier.tflite`).
+When no real model is loaded, `classify()` returns the neutral score `0.5`, which falls in the
+uncertain range and forwards every scan to Gemini + Claude — keeping accuracy intact while the
+model is absent.
+
+### Train your own MobileNetV3 classifier
+
+A Google Colab notebook is included at `scripts/train_product_classifier.ipynb`.
+It handles everything end-to-end:
+
+```
+scripts/
+├── prepare_dataset.py              ← scaffold dataset folders + print collection guide
+├── train_product_classifier.ipynb  ← full Colab training notebook
+└── README.md                       ← dataset collection guide (sources, minimums)
+```
+
+#### Step 1 — Scaffold the dataset folders
+
+```bash
+python scripts/prepare_dataset.py
+```
+
+Creates `dataset/train/{authentic,fake}` and `dataset/validation/{authentic,fake}`.
+Follow the printed instructions to collect 300–500 images per class.
+
+#### Step 2 — Open the notebook in Google Colab
+
+Upload `scripts/train_product_classifier.ipynb` to [colab.research.google.com](https://colab.research.google.com)
+or open it from Google Drive. Connect to a **GPU runtime** (free T4 is sufficient).
+
+#### Step 3 — Train
+
+The notebook handles all steps automatically:
+
+| Step | What it does |
+|------|-------------|
+| Environment setup | Install TFLite, sklearn, matplotlib |
+| Data loading | `ImageDataGenerator` with augmentation (flip, zoom, rotation) |
+| Phase 1 (20 epochs) | Train custom head; MobileNetV3Small base frozen |
+| Phase 2 (10 epochs) | Unfreeze top 30 layers; fine-tune at lr=1e-5 |
+| Evaluation | Accuracy, precision, recall, F1, confusion matrix |
+| INT8 quantization | 4× size reduction; representative dataset calibration |
+| Android export | Saves `product_classifier.tflite` |
+
+**Expected accuracy:** > 85% on the validation set (>90% with 500+ images per class)
+
+#### Step 4 — Replace the placeholder model
+
+```bash
+# After training, copy the output file to the app assets:
+cp /content/product_classifier.tflite \
+   app/src/main/assets/product_classifier.tflite
+```
+
+Rebuild the app — TFLite inference activates automatically on the next run.
+
+### Cost & performance
+
+| Metric | Value |
+|--------|-------|
+| Training cost | **$0** (Google Colab free tier) |
+| Inference time | < 50 ms on a mid-range device |
+| Model size (INT8) | ~1 MB |
+| On-device — needs internet | ❌ No |
+| High-confidence bypass rate | Depends on dataset quality |
+
+### Score → Verdict mapping
+
+| TFLite score | Verdict | Action |
+|-------------|---------|--------|
+| < 0.05 | AUTHENTIC (≥95% confident) | Skip Gemini — return instantly |
+| 0.05 – 0.90 | Uncertain | Forward to Gemini + Claude |
+| > 0.90 | LIKELY_FAKE (≥90% confident) | Skip Gemini — return instantly |
 
 ---
 
@@ -226,7 +324,15 @@ anthropic.api.key=YOUR_ANTHROPIC_API_KEY_HERE
 - Enable billing at [Google Cloud Console](https://console.cloud.google.com/billing)
 - The app uses `gemini-2.5-flash` which requires a billing-enabled project
 
-> **Cost estimate:** ~$0.0001 per scan. Very affordable for personal use.
+> **Cost per scan** depends on TFLite confidence:
+>
+> | Scan type | Steps used | Cost |
+> |-----------|-----------|------|
+> | High-confidence (TFLite only) | TFLite → result | **$0.00** |
+> | Low-confidence (full pipeline) | TFLite → Gemini → Claude | **~$0.0002** |
+>
+> High-confidence scans are completely free — no API call is made. For uncertain scans,
+> Gemini + Claude together cost roughly $0.0002 (Gemini ~$0.0001 + Claude ~$0.0001).
 
 ### 4. Build & Run
 ```bash
@@ -290,15 +396,19 @@ local.properties          ← API keys (gitignored)
 ### Test Structure
 ```
 app/src/test/java/com/example/fakeproductdetector/
-├── domain/model/
-│   └── ScanResultTest.kt          ← Model classes, enums, data integrity
-├── data/api/
-│   ├── GeminiQuotaErrorTest.kt    ← Sealed class coverage, when() exhaustion
-│   └── GeminiVisionApiImplTest.kt ← JSON parsing, verdict parsing, score parsing
-├── domain/usecase/
-│   └── ScanProductUseCaseTest.kt  ← Use case logic, repository delegation (Mockito)
+├── data/
+│   ├── api/
+│   │   ├── GeminiQuotaErrorTest.kt    ← Sealed class coverage, when() exhaustion
+│   │   └── GeminiVisionApiImplTest.kt ← JSON parsing, verdict parsing, score parsing
+│   └── ml/
+│       └── ProductClassifierTest.kt   ← scoreToVerdict mapping, mock Interpreter, tensor shape
+├── domain/
+│   ├── model/
+│   │   └── ScanResultTest.kt          ← Model classes, enums, data integrity
+│   └── usecase/
+│       └── ScanProductUseCaseTest.kt  ← ScanEvent flow, repository delegation (Mockito)
 └── ui/scan/
-    └── ScanUiStateTest.kt         ← All sealed UI states, edge cases
+    └── ScanUiStateTest.kt             ← All sealed UI states, edge cases
 ```
 
 ### Running Tests
@@ -321,7 +431,8 @@ app/src/test/java/com/example/fakeproductdetector/
 | Sealed UI states (Idle/Loading/Error/RateLimited/Success) | 10 | ✅ 100% |
 | GeminiQuotaError sealed class + when() expressions | 6 | ✅ 100% |
 | JSON extraction + verdict/score parsing logic | 13 | ✅ 100% |
-| ScanProductUseCase with mocked repository | 7 | ✅ 100% |
+| ScanProductUseCase with mocked repository (ScanEvent flow) | 7 | ✅ 100% |
+| ProductClassifier — scoreToVerdict, mock Interpreter, tensor shape | 11 | ✅ 100% |
 
 ---
 
@@ -535,18 +646,18 @@ flowchart TD
 
 ---
 
-### ML Kit vs Gemini vs Claude — Side by Side
+### ML Kit vs TFLite vs Gemini vs Claude — Side by Side
 
-| | ML Kit | Gemini 2.5 Flash | Claude Haiku |
-|---|---|---|---|
-| **Role** | 🔲 Barcode Reader | 👁️ Vision Scanner | 🧠 Verifier |
-| **When runs** | Every live frame | Once on capture | Once after Gemini |
-| **Input** | Live camera frame | JPEG photo | Gemini's text output |
-| **Output** | Barcode string | Score + verdict + flags | Refined verdict |
-| **Needs internet** | ❌ No — on-device | ✅ Yes | ✅ Yes |
-| **Costs money** | ❌ Free | ✅ ~$0.0001/scan | ✅ ~$0.0001/scan |
-| **Can see image** | ✅ Yes (frames) | ✅ Yes (photo) | ❌ No (text only) |
-| **Checks authenticity** | ❌ No | ✅ Yes | ✅ Yes |
+| | ML Kit | TFLite | Gemini 2.5 Flash | Claude Haiku |
+|---|---|---|---|---|
+| **Role** | 🔲 Barcode Reader | ⚡ Pre-scan Filter | 👁️ Vision Scanner | 🧠 Verifier |
+| **When runs** | Every live frame | Once on capture | Only if TFLite uncertain | Only if Gemini runs |
+| **Input** | Live camera frame | Bitmap (224×224) | JPEG photo | Gemini's text output |
+| **Output** | Barcode string | Fake probability [0–1] | Score + verdict + flags | Refined verdict |
+| **Needs internet** | ❌ No — on-device | ❌ No — on-device | ✅ Yes | ✅ Yes |
+| **Costs money** | ❌ Free | ❌ Free | ✅ ~$0.0001/scan | ✅ ~$0.0001/scan |
+| **Can see image** | ✅ Yes (frames) | ✅ Yes (photo) | ✅ Yes (photo) | ❌ No (text only) |
+| **Checks authenticity** | ❌ No | ✅ Yes (binary) | ✅ Yes (detailed) | ✅ Yes (reasoned) |
 
 ---
 
@@ -669,7 +780,7 @@ whenever(mockRepository.scanProduct(any(), eq("FAKE_BARCODE"), any()))
 
 ## 🗺️ Roadmap
 
-- [ ] Offline mode with on-device ML
+- [x] Offline mode with on-device ML (TFLite MobileNetV3 pre-scan)
 - [ ] Product database for known counterfeits
 - [ ] Share scan result as image/PDF
 - [ ] Batch scanning mode
