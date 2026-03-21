@@ -464,6 +464,99 @@ OkHttpClient.Builder()
 
 ---
 
+## 🤖 Gemini vs Claude — What Each AI Does
+
+### In Simple Terms
+
+| | Gemini 2.5 Flash | Claude Haiku |
+|---|---|---|
+| **Role** | 👁️ The Scanner | 🧠 The Verifier |
+| **Can see images?** | ✅ Yes | ❌ No |
+| **Input** | Camera image | Gemini's text analysis |
+| **Does what?** | Reads packaging visually | Cross-checks the reasoning |
+| **Analogy** | Lab technician running tests | Senior doctor reviewing results |
+
+---
+
+### How They Work Together
+
+```mermaid
+flowchart TD
+    A([📸 Camera Image]) --> B
+
+    subgraph GEMINI["👁️ Gemini 2.5 Flash  —  The SCANNER"]
+        B[Receives the image]
+        B --> C[Reads packaging visually]
+        C --> C1[Product name & logo]
+        C --> C2[Label text & ingredients]
+        C --> C3[Print quality & fonts]
+        C --> C4[Barcode if present]
+        C1 & C2 & C3 & C4 --> D[Returns first assessment]
+    end
+
+    D --> E
+
+    subgraph CLAUDE["🧠 Claude Haiku  —  The VERIFIER"]
+        E[Receives Gemini's TEXT analysis\nNO image — text only]
+        E --> F[Cross-checks the reasoning]
+        F --> F1[Does the score make sense?]
+        F --> F2[Are red flags valid?]
+        F --> F3[Any missed concerns?]
+        F --> F4[Is explanation complete?]
+        F1 & F2 & F3 & F4 --> G[Returns refined verdict]
+    end
+
+    G --> H([✅ Final Result shown to user])
+
+    style GEMINI fill:#1565c0,color:#fff
+    style CLAUDE fill:#2e7d32,color:#fff
+    style A fill:#e65100,color:#fff
+    style H fill:#e65100,color:#fff
+```
+
+---
+
+### What happens if Claude fails?
+
+```mermaid
+flowchart LR
+    A[Gemini ✅] -->|analysis| B{Claude?}
+    B -->|✅ Available| C[Refined result\nDual-AI verdict]
+    B -->|❌ Fails / Rate limited| D[Gemini result used directly\nGraceful fallback]
+    C --> E([User sees result])
+    D --> E
+
+    style B fill:#f57f17,color:#fff
+    style C fill:#2e7d32,color:#fff
+    style D fill:#b71c1c,color:#fff
+```
+
+> **The app never crashes** — if Claude is unavailable, Gemini's analysis is shown directly with a note `[Gemini only — Claude verification skipped]`
+
+---
+
+### Real Example From Our Logs
+
+```
+📸 Image sent to Gemini
+        ↓
+👁️  GEMINI analyzed:
+    - Read "Warnings", "Directions", "Acetaminophen" text
+    - Verified dosage instructions are medically accurate
+    - Checked print quality → professional, no blurring
+    - Score: 95/100  Verdict: AUTHENTIC
+        ↓
+🧠  CLAUDE verified:
+    - Gemini's reasoning is sound
+    - UPC barcode cross-references correctly
+    - No inconsistencies in the analysis
+    - Confirmed Score: 95/100  Verdict: AUTHENTIC ✅
+        ↓
+✅  User sees: "Tylenol Children's Oral Suspension — 95/100 Authentic"
+```
+
+---
+
 ## 📱 Real-World Use Cases
 
 ### Use Case 1: Scan with Barcode (Highest Confidence)
