@@ -20,38 +20,7 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 
 ## 📸 Screenshots
 
-> Add your screenshots to the `/screenshots` folder and they'll appear here.
-
-| Scan Screen | Authentic Result | Fake Detection |
-|-------------|-----------------|----------------|
-| ![Scan](screenshots/01_scan_screen.png) | ![Authentic](screenshots/02_result_authentic.png) | ![Fake](screenshots/03_result_fake.png) |
-
-| History | Rate Limit Banner |
-|---------|-------------------|
-| ![History](screenshots/04_history_screen.png) | ![Rate Limit](screenshots/05_rate_limit_banner.png) |
-
-### How to add screenshots to GitHub
-```bash
-# Take screenshots on your device, then:
-cp ~/Downloads/screenshot.png screenshots/01_scan_screen.png
-git add screenshots/
-git commit -m "Add app screenshots"
-git push
-```
-Or simply drag-and-drop image files in the GitHub web UI under the `screenshots/` folder.
-
-**Real scan result (from logs):**
-```
-Product: Tylenol Children's Oral Suspension
-Barcode: 300450122377
-Authenticity Score: 95/100
-Verdict: AUTHENTIC ✅
-Model: gemini-2.5-flash (6941ms response time)
-
-"The UPC barcode '3 00450 12237 7' resolves to Children's Tylenol Oral Suspension,
-Berry Flavor. Print quality is clear and professional with no spelling errors,
-inconsistencies, or low-quality graphics suggesting counterfeiting."
-```
+> Screenshots will be added here once available. Take them on your device and drop them in the `/screenshots` folder.
 
 ---
 
