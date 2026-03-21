@@ -3,6 +3,7 @@ package com.example.fakeproductdetector.ui.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.fakeproductdetector.domain.model.ScanResult
+import com.example.fakeproductdetector.domain.repository.ProductRepository
 import com.example.fakeproductdetector.domain.usecase.GetScanHistoryUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +14,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
-    private val getScanHistoryUseCase: GetScanHistoryUseCase
+    private val getScanHistoryUseCase: GetScanHistoryUseCase,
+    private val repository: ProductRepository
 ) : ViewModel() {
 
     private val _history = MutableStateFlow<List<ScanResult>>(emptyList())
@@ -25,5 +27,9 @@ class HistoryViewModel @Inject constructor(
                 _history.value = results
             }
         }
+    }
+
+    fun deleteItem(id: String) {
+        viewModelScope.launch { repository.deleteScan(id) }
     }
 }
