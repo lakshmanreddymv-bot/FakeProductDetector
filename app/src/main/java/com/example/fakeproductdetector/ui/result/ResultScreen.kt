@@ -18,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,6 +36,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -55,10 +60,20 @@ import java.util.Locale
 @Composable
 fun ResultScreen(
     scanResult: ScanResult,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: ResultViewModel
 ) {
     val context = LocalContext.current
     val verdictColor = Color(android.graphics.Color.parseColor(scanResult.verdict.color))
+    val isMuted by viewModel.isMuted.collectAsState()
+
+    LaunchedEffect(scanResult) {
+        viewModel.speakResult(scanResult)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { viewModel.stopSpeaking() }
+    }
 
     Scaffold(
         topBar = {
@@ -70,6 +85,12 @@ fun ResultScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.toggleMute() }) {
+                        Icon(
+                            imageVector = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                            contentDescription = if (isMuted) "Unmute" else "Mute"
+                        )
+                    }
                     IconButton(onClick = {
                         val shareText = buildShareText(scanResult)
                         val intent = Intent(Intent.ACTION_SEND).apply {

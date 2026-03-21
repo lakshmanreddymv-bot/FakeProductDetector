@@ -2,19 +2,15 @@ package com.example.fakeproductdetector.domain.usecase
 
 import com.example.fakeproductdetector.domain.model.*
 import com.example.fakeproductdetector.domain.repository.ProductRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.*
 
-/**
- * Unit tests for ScanProductUseCase.
- * Uses mockito-kotlin to mock the repository.
- * Add to app/build.gradle.kts:
- *   testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
- *   testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
- */
 class ScanProductUseCaseTest {
 
     private lateinit var mockRepository: ProductRepository
@@ -56,47 +52,47 @@ class ScanProductUseCaseTest {
     }
 
     @Test
-    fun `invoke returns Success when repository succeeds`() = runTest {
+    fun `invoke emits result when repository succeeds`() = runTest {
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(Result.success(authenticResult))
+            .thenReturn(flowOf(authenticResult))
 
-        val result = useCase("content://image", "300450122377", Category.MEDICINE)
+        val result = useCase("content://image", "300450122377", Category.MEDICINE).first()
 
-        assertTrue(result.isSuccess)
-        assertEquals(Verdict.AUTHENTIC, result.getOrNull()?.verdict)
-        assertEquals(95f, result.getOrNull()?.authenticityScore)
+        assertEquals(Verdict.AUTHENTIC, result.verdict)
+        assertEquals(95f, result.authenticityScore)
     }
 
     @Test
-    fun `invoke returns Failure when repository throws`() = runTest {
-        val exception = Exception("Network error")
+    fun `invoke propagates exception when repository flow throws`() = runTest {
+        val exception = RuntimeException("Network error")
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(Result.failure(exception))
+            .thenReturn(flow { throw exception })
 
-        val result = useCase("content://image", "300450122377", Category.MEDICINE)
+        val outcome = runCatching {
+            useCase("content://image", "300450122377", Category.MEDICINE).first()
+        }
 
-        assertTrue(result.isFailure)
-        assertEquals("Network error", result.exceptionOrNull()?.message)
+        assertTrue(outcome.isFailure)
+        assertEquals("Network error", outcome.exceptionOrNull()?.message)
     }
 
     @Test
-    fun `invoke returns LIKELY_FAKE verdict when product is counterfeit`() = runTest {
+    fun `invoke emits LIKELY_FAKE verdict when product is counterfeit`() = runTest {
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(Result.success(fakeResult))
+            .thenReturn(flowOf(fakeResult))
 
-        val result = useCase("content://image", "111", Category.LUXURY)
+        val result = useCase("content://image", "111", Category.LUXURY).first()
 
-        assertTrue(result.isSuccess)
-        assertEquals(Verdict.LIKELY_FAKE, result.getOrNull()?.verdict)
-        assertEquals(2, result.getOrNull()?.redFlags?.size)
+        assertEquals(Verdict.LIKELY_FAKE, result.verdict)
+        assertEquals(2, result.redFlags.size)
     }
 
     @Test
     fun `invoke delegates imageUri to repository correctly`() = runTest {
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(Result.success(authenticResult))
+            .thenReturn(flowOf(authenticResult))
 
-        useCase("content://specific_image", "123", Category.FOOD)
+        useCase("content://specific_image", "123", Category.FOOD).first()
 
         verify(mockRepository).scanProduct("content://specific_image", "123", Category.FOOD)
     }
@@ -104,11 +100,11 @@ class ScanProductUseCaseTest {
     @Test
     fun `invoke with null barcode still calls repository`() = runTest {
         whenever(mockRepository.scanProduct(any(), isNull(), any()))
-            .thenReturn(Result.success(authenticResult))
+            .thenReturn(flowOf(authenticResult))
 
-        val result = useCase("content://image", null, Category.OTHER)
+        val result = useCase("content://image", null, Category.OTHER).first()
 
-        assertTrue(result.isSuccess)
+        assertEquals(Verdict.AUTHENTIC, result.verdict)
         verify(mockRepository).scanProduct("content://image", null, Category.OTHER)
     }
 
@@ -120,11 +116,11 @@ class ScanProductUseCaseTest {
             redFlags = listOf("Packaging slightly off")
         )
         whenever(mockRepository.scanProduct(any(), any(), any()))
-            .thenReturn(Result.success(suspiciousResult))
+            .thenReturn(flowOf(suspiciousResult))
 
-        val result = useCase("content://image", "999", Category.ELECTRONICS)
+        val result = useCase("content://image", "999", Category.ELECTRONICS).first()
 
-        assertEquals(Verdict.SUSPICIOUS, result.getOrNull()?.verdict)
-        assertEquals(55f, result.getOrNull()?.authenticityScore)
+        assertEquals(Verdict.SUSPICIOUS, result.verdict)
+        assertEquals(55f, result.authenticityScore)
     }
 }

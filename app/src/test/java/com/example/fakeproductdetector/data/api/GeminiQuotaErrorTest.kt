@@ -24,9 +24,9 @@ class GeminiQuotaErrorTest {
     }
 
     @Test
-    fun `Generic sealed class holds message`() {
-        val error = GeminiQuotaError.Generic("Unknown quota error")
-        assertEquals("Unknown quota error", error.message)
+    fun `Generic object has a non-null message`() {
+        assertNotNull(GeminiQuotaError.Generic.message)
+        assertTrue(GeminiQuotaError.Generic.message!!.isNotEmpty())
     }
 
     @Test
@@ -41,22 +41,27 @@ class GeminiQuotaErrorTest {
             GeminiQuotaError.TokenLimitPerMinute,
             GeminiQuotaError.RequestsPerMinute,
             GeminiQuotaError.DailyLimitExhausted,
-            GeminiQuotaError.Generic("test")
+            GeminiQuotaError.Generic
         )
         errors.forEach { error ->
             val result = when (error) {
                 GeminiQuotaError.TokenLimitPerMinute -> "token_rpm"
                 GeminiQuotaError.RequestsPerMinute -> "req_rpm"
                 GeminiQuotaError.DailyLimitExhausted -> "daily"
-                is GeminiQuotaError.Generic -> "generic"
+                GeminiQuotaError.Generic -> "generic"
             }
             assertNotNull(result)
         }
     }
 
     @Test
-    fun `Generic error with empty message is valid`() {
-        val error = GeminiQuotaError.Generic("")
-        assertEquals("", error.message)
+    fun `All quota errors are subtypes of Exception`() {
+        val errors = listOf(
+            GeminiQuotaError.TokenLimitPerMinute,
+            GeminiQuotaError.RequestsPerMinute,
+            GeminiQuotaError.DailyLimitExhausted,
+            GeminiQuotaError.Generic
+        )
+        errors.forEach { assertTrue(it is Exception) }
     }
 }

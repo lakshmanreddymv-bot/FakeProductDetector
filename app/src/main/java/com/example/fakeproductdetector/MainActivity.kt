@@ -96,7 +96,8 @@ private fun AppContent() {
                 result?.let { scanResult ->
                     ResultScreen(
                         scanResult = scanResult,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        viewModel = viewModel
                     )
                 } ?: Box(
                     modifier = Modifier.fillMaxSize(),

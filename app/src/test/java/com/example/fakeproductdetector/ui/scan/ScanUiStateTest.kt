@@ -14,7 +14,19 @@ class ScanUiStateTest {
 
     @Test
     fun `Loading state is distinct from Idle`() {
-        assertNotEquals(ScanUiState.Idle, ScanUiState.Loading)
+        assertNotEquals(ScanUiState.Idle, ScanUiState.Loading())
+    }
+
+    @Test
+    fun `Loading state uses default message when none provided`() {
+        val state = ScanUiState.Loading()
+        assertEquals("Analyzing product...", state.message)
+    }
+
+    @Test
+    fun `Loading state holds custom message`() {
+        val state = ScanUiState.Loading("Verifying with Claude...")
+        assertEquals("Verifying with Claude...", state.message)
     }
 
     @Test
@@ -82,7 +94,7 @@ class ScanUiStateTest {
     @Test
     fun `All states are mutually distinct`() {
         val idle = ScanUiState.Idle
-        val loading = ScanUiState.Loading
+        val loading = ScanUiState.Loading()
         val error = ScanUiState.Error("err")
         val rateLimited = ScanUiState.RateLimited(30, false, "title", "sub")
 
@@ -96,7 +108,7 @@ class ScanUiStateTest {
     fun `When expression covers all UI states`() {
         val states: List<ScanUiState> = listOf(
             ScanUiState.Idle,
-            ScanUiState.Loading,
+            ScanUiState.Loading(),
             ScanUiState.Error("test"),
             ScanUiState.RateLimited(60, false, "T", "S")
         )
