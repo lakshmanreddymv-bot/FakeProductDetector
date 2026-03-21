@@ -84,13 +84,26 @@ class ProductRepositoryImpl @Inject constructor(
     override fun scanProduct(
         imageUri: String,
         barcode: String?,
-        category: Category
+        category: Category,
+        bitmap: android.graphics.Bitmap?
     ): Flow<ScanEvent> = flow {
 
-        // ── TFLite pre-scan disabled — placeholder model not trained yet ──
-        // Will be re-enabled once product_classifier.tflite is trained.
-        // val bitmap = loadBitmap(imageUri)
-        // val tfliteScore = bitmap?.let { classifier.classify(it) } ?: ProductClassifier.NEUTRAL_SCORE
+        // ── Step 1: TFLite pre-scan (offline, instant, free) ──────────────
+        // Bitmap is decoded in ScanScreen right after CameraX confirms file
+        // is fully written — avoids Samsung libjpeg error 122.
+        if (bitmap != null) {
+            val tfliteScore = classifier.classify(bitmap)
+            Log.d(TAG, "TFLite score: $tfliteScore")
+            if (tfliteScore < TFLITE_AUTHENTIC_THRESHOLD || tfliteScore > TFLITE_FAKE_THRESHOLD) {
+                val verdict = ProductClassifier.scoreToVerdict(tfliteScore)
+                Log.d(TAG, "TFLite high-confidence ($tfliteScore) → $verdict, skipping cloud")
+                val result = buildTfliteResult(imageUri, barcode, category, tfliteScore, verdict)
+                scanDao.insertScan(result.toEntity())
+                emit(ScanEvent.Result(result))
+                return@flow
+            }
+            Log.d(TAG, "TFLite uncertain ($tfliteScore) → proceeding to cloud")
+        }
 
         // ── Offline guard ─────────────────────────────────────────────────
         if (!isNetworkAvailable()) {

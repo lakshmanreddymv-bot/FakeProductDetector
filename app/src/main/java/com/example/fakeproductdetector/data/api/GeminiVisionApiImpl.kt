@@ -40,8 +40,11 @@ class GeminiVisionApiImpl @Inject constructor(
     suspend fun analyze(imageUri: String, category: Category): GeminiAnalysis {
         val uri = Uri.parse(imageUri)
 
-        val rawBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: throw IOException("Cannot read image from URI: $imageUri")
+        // contentResolver.openInputStream fails on file:// URIs — handle both schemes
+        val rawBytes = when (uri.scheme) {
+            "file" -> uri.path?.let { java.io.File(it).readBytes() }
+            else   -> context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        } ?: throw IOException("Cannot read image from URI: $imageUri")
 
         val compressed = compressImage(rawBytes)
         val base64Image = Base64.encodeToString(compressed, Base64.NO_WRAP)
