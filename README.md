@@ -491,6 +491,84 @@ flowchart LR
 
 ---
 
+---
+
+## 🔍 Role of ML Kit
+
+### One Line Answer
+> **ML Kit reads the barcode silently in real-time on every camera frame — BEFORE you even tap Capture.**
+
+---
+
+### Where Each Tool Runs
+
+```mermaid
+flowchart TD
+    CAM([📷 Live Camera Feed])
+
+    subgraph REALTIME["⚡ Real-Time — Every Frame"]
+        ML[ML Kit Barcode Scanner\nRuns on-device · No internet · Free]
+        ML --> BD{Barcode found?}
+        BD -->|Yes| GB[🟢 Green badge appears\ne.g. '300450122377']
+        BD -->|No| GR[⚫ Grey badge appears\n'No barcode detected']
+    end
+
+    CAM --> ML
+
+    TAP([👆 User Taps Capture]) --> PHOTO
+
+    subgraph ONCAPTURE["📸 On Capture — Once per scan"]
+        PHOTO[JPEG photo saved]
+        PHOTO --> GEM[Gemini Vision\nAnalyzes the image]
+        GEM --> CLU[Claude Haiku\nVerifies the analysis]
+        CLU --> RES[✅ Result shown]
+    end
+
+    GB -.->|barcode passed along| PHOTO
+    GR -.->|null barcode passed| PHOTO
+
+    style REALTIME fill:#1565c0,color:#fff
+    style ONCAPTURE fill:#2e7d32,color:#fff
+    style CAM fill:#e65100,color:#fff
+    style TAP fill:#e65100,color:#fff
+```
+
+---
+
+### ML Kit vs Gemini vs Claude — Side by Side
+
+| | ML Kit | Gemini 2.5 Flash | Claude Haiku |
+|---|---|---|---|
+| **Role** | 🔲 Barcode Reader | 👁️ Vision Scanner | 🧠 Verifier |
+| **When runs** | Every live frame | Once on capture | Once after Gemini |
+| **Input** | Live camera frame | JPEG photo | Gemini's text output |
+| **Output** | Barcode string | Score + verdict + flags | Refined verdict |
+| **Needs internet** | ❌ No — on-device | ✅ Yes | ✅ Yes |
+| **Costs money** | ❌ Free | ✅ ~$0.0001/scan | ✅ ~$0.0001/scan |
+| **Can see image** | ✅ Yes (frames) | ✅ Yes (photo) | ❌ No (text only) |
+| **Checks authenticity** | ❌ No | ✅ Yes | ✅ Yes |
+
+---
+
+### Simple Analogy — Passport Check at Airport
+
+```mermaid
+flowchart LR
+    P([🛂 Passport Check]) --> ML2
+    ML2["🔲 ML Kit\nScans MRZ number\nat the bottom"]
+    ML2 --> GEM2["👁️ Gemini\nOfficer inspects photo,\nwatermarks, fonts, holograms"]
+    GEM2 --> CLU2["🧠 Claude\nSenior officer reviews\nfirst officer's report"]
+    CLU2 --> OUT2(["✅ APPROVED\nor ❌ FLAGGED"])
+
+    style ML2 fill:#f57f17,color:#fff
+    style GEM2 fill:#1565c0,color:#fff
+    style CLU2 fill:#2e7d32,color:#fff
+```
+
+> ML Kit just **reads the number**. Gemini and Claude **judge if it's real**.
+
+---
+
 ## 📱 Real-World Use Cases
 
 ### Use Case 1: Scan with Barcode (Highest Confidence)
