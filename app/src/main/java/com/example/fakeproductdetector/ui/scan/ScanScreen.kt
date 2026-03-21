@@ -274,21 +274,26 @@ fun ScanScreen(
                 }
             }
 
-            // Barcode indicator
-            detectedBarcode?.let { barcode ->
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 80.dp)
-                        .background(Color(0xFF4CAF50).copy(alpha = 0.85f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "Barcode: $barcode",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodySmall
+            // Barcode indicator — always visible so user knows scan status
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 80.dp)
+                    .background(
+                        if (detectedBarcode != null) Color(0xFF4CAF50).copy(alpha = 0.85f)
+                        else Color(0xFF757575).copy(alpha = 0.85f),
+                        RoundedCornerShape(8.dp)
                     )
-                }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = if (detectedBarcode != null)
+                        "✓ Barcode: $detectedBarcode"
+                    else
+                        "No barcode detected — image-only scan",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
             // Bottom controls
