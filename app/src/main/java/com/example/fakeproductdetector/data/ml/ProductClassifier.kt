@@ -6,12 +6,9 @@ import android.util.Log
 import com.example.fakeproductdetector.domain.model.Verdict
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.support.image.ImageProcessor
-import org.tensorflow.lite.support.image.TensorImage
-import org.tensorflow.lite.support.image.ops.NormalizeOp
-import org.tensorflow.lite.support.image.ops.ResizeOp
 import java.io.FileInputStream
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import javax.inject.Inject
@@ -63,11 +60,6 @@ class ProductClassifier @Inject constructor(
         }
     }
 
-    private val imageProcessor = ImageProcessor.Builder()
-        .add(ResizeOp(INPUT_SIZE, INPUT_SIZE, ResizeOp.ResizeMethod.BILINEAR))
-        .add(NormalizeOp(0f, 255f))   // uint8 pixels → [0, 1] float
-        .build()
-
     private fun loadModelFile(): MappedByteBuffer {
         val afd = context.assets.openFd(MODEL_FILE)
         return FileInputStream(afd.fileDescriptor).channel.map(
@@ -80,8 +72,22 @@ class ProductClassifier @Inject constructor(
     override fun classify(bitmap: Bitmap): Float {
         // Short-circuit before touching the bitmap — no point preprocessing if no model.
         if (interpreter == null) return NEUTRAL_SCORE
-        val tensorImage = imageProcessor.process(TensorImage.fromBitmap(bitmap))
-        return classifyBuffer(tensorImage.buffer)
+        val scaled = Bitmap.createScaledBitmap(bitmap, INPUT_SIZE, INPUT_SIZE, true)
+        return classifyBuffer(bitmapToFloatBuffer(scaled))
+    }
+
+    /** Scales and normalises [bitmap] into a float32 [0,1] ByteBuffer ready for inference. */
+    private fun bitmapToFloatBuffer(bitmap: Bitmap): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(INPUT_BUFFER_BYTES)
+        buffer.order(ByteOrder.nativeOrder())
+        val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
+        bitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
+        for (pixel in pixels) {
+            buffer.putFloat(((pixel shr 16) and 0xFF) / 255.0f)  // R
+            buffer.putFloat(((pixel shr 8) and 0xFF) / 255.0f)   // G
+            buffer.putFloat((pixel and 0xFF) / 255.0f)            // B
+        }
+        return buffer
     }
 
     /**

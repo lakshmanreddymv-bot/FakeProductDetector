@@ -109,9 +109,13 @@ dependencies {
     // Accompanist Permissions
     implementation(libs.accompanist.permissions)
 
-    // TFLite
-    implementation(libs.tflite)
-    implementation(libs.tflite.support)
+    // TFLite — exclude the *-api AAR to avoid duplicate-namespace conflict in AGP 9+.
+    // The main tensorflow-lite AAR bundles those classes itself, so they're present at runtime.
+    // compileOnly gives Kotlin visibility of InterpreterApi (supertype) at compile time only.
+    implementation(libs.tflite) {
+        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
+    }
+    compileOnly("org.tensorflow:tensorflow-lite-api:2.14.0")
 
     // Coroutines
     implementation(libs.coroutines.android)
