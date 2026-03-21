@@ -12,7 +12,6 @@ class ScanProductUseCase @Inject constructor(
     operator fun invoke(
         imageUri: String,
         barcode: String?,
-        category: Category,
-        bitmap: android.graphics.Bitmap? = null
-    ): Flow<ScanEvent> = repository.scanProduct(imageUri, barcode, category, bitmap)
+        category: Category
+    ): Flow<ScanEvent> = repository.scanProduct(imageUri, barcode, category)
 }

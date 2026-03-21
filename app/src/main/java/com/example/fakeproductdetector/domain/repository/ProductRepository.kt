@@ -9,8 +9,7 @@ interface ProductRepository {
     fun scanProduct(
         imageUri: String,
         barcode: String?,
-        category: Category,
-        bitmap: android.graphics.Bitmap? = null
+        category: Category
     ): Flow<ScanEvent>
 
     fun getScanHistory(): Flow<List<ScanResult>>

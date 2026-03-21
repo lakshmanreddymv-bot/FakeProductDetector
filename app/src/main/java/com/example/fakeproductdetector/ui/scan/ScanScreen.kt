@@ -380,7 +380,7 @@ fun ScanScreen(
                                 object : ImageCapture.OnImageSavedCallback {
                                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                                         val uri = Uri.fromFile(outputFile).toString()
-                                        viewModel.scanProduct(uri, detectedBarcode, selectedCategory, null)
+                                        viewModel.scanProduct(uri, detectedBarcode, selectedCategory)
                                     }
                                     override fun onError(exc: ImageCaptureException) {
                                         scope.launch {

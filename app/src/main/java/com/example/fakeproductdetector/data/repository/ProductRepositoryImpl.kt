@@ -1,7 +1,6 @@
 package com.example.fakeproductdetector.data.repository
 
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -10,8 +9,6 @@ import com.example.fakeproductdetector.data.api.ClaudeVerificationApiImpl
 import com.example.fakeproductdetector.data.api.GeminiVisionApiImpl
 import com.example.fakeproductdetector.data.local.ScanDao
 import com.example.fakeproductdetector.data.local.ScanEntity
-import com.example.fakeproductdetector.data.ml.ProductClassifier
-import com.example.fakeproductdetector.data.ml.ProductClassifierInterface
 import com.example.fakeproductdetector.domain.model.Category
 import com.example.fakeproductdetector.domain.model.Product
 import com.example.fakeproductdetector.domain.model.ScanEvent
@@ -38,13 +35,6 @@ import javax.inject.Singleton
  */
 private const val MAX_NETWORK_RETRIES = 1
 private const val NETWORK_RETRY_DELAY_MS = 3_000L
-
-// TFLite confidence thresholds for bypassing the cloud pipeline.
-// The model outputs fake-probability in [0, 1]:
-//   score < 0.05 → ≥95% confident AUTHENTIC → skip Gemini
-//   score > 0.90 → ≥90% confident LIKELY_FAKE → skip Gemini
-private const val TFLITE_AUTHENTIC_THRESHOLD = 0.05f
-private const val TFLITE_FAKE_THRESHOLD = 0.90f
 
 internal fun Exception.isRateLimit() =
     message?.contains("429") == true ||
@@ -75,7 +65,6 @@ class ProductRepositoryImpl @Inject constructor(
     private val scanDao: ScanDao,
     private val geminiApi: GeminiVisionApiImpl,
     private val claudeApi: ClaudeVerificationApiImpl,
-    private val classifier: ProductClassifierInterface,
     @ApplicationContext private val context: Context
 ) : ProductRepository {
 
@@ -84,26 +73,8 @@ class ProductRepositoryImpl @Inject constructor(
     override fun scanProduct(
         imageUri: String,
         barcode: String?,
-        category: Category,
-        bitmap: android.graphics.Bitmap?
+        category: Category
     ): Flow<ScanEvent> = flow {
-
-        // ── Step 1: TFLite pre-scan (offline, instant, free) ──────────────
-        // Bitmap is decoded in ScanScreen right after CameraX confirms file
-        // is fully written — avoids Samsung libjpeg error 122.
-        if (bitmap != null) {
-            val tfliteScore = classifier.classify(bitmap)
-            Log.d(TAG, "TFLite score: $tfliteScore")
-            if (tfliteScore < TFLITE_AUTHENTIC_THRESHOLD || tfliteScore > TFLITE_FAKE_THRESHOLD) {
-                val verdict = ProductClassifier.scoreToVerdict(tfliteScore)
-                Log.d(TAG, "TFLite high-confidence ($tfliteScore) → $verdict, skipping cloud")
-                val result = buildTfliteResult(imageUri, barcode, category, tfliteScore, verdict)
-                scanDao.insertScan(result.toEntity())
-                emit(ScanEvent.Result(result))
-                return@flow
-            }
-            Log.d(TAG, "TFLite uncertain ($tfliteScore) → proceeding to cloud")
-        }
 
         // ── Offline guard ─────────────────────────────────────────────────
         if (!isNetworkAvailable()) {
@@ -188,97 +159,6 @@ class ProductRepositoryImpl @Inject constructor(
         return cm.activeNetwork?.let {
             cm.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         } ?: false
-    }
-
-    private fun loadBitmap(imageUri: String): android.graphics.Bitmap? {
-        return try {
-            val uri = Uri.parse(imageUri)
-            val filePath = when (uri.scheme) {
-                "file" -> uri.path ?: return null
-                "content" -> {
-                    // For content URIs decode via stream — no rotation fix needed
-                    return context.contentResolver
-                        .openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-                }
-                else -> imageUri
-            }
-
-            // Decode with inJustDecodeBounds first to get dimensions, then subsample if huge
-            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(filePath, opts)
-            val rawW = opts.outWidth
-            val rawH = opts.outHeight
-            val sampleSize = if (rawW > 1024 || rawH > 1024) {
-                maxOf(rawW / 1024, rawH / 1024)
-            } else 1
-
-            val decodeOpts = BitmapFactory.Options().apply {
-                inSampleSize = sampleSize
-                inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
-            }
-
-            // Use ExifInterface to read rotation — avoids libjpeg error 122 on Samsung devices
-            val exifDegrees = try {
-                val exif = androidx.exifinterface.media.ExifInterface(filePath)
-                when (exif.getAttributeInt(
-                    androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
-                    androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
-                )) {
-                    androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90
-                    androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180
-                    androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270
-                    else -> 0
-                }
-            } catch (e: Exception) { 0 }
-
-            // Decode via FileInputStream to avoid strict-mode JPEG parser
-            val bitmap = java.io.FileInputStream(filePath).use {
-                BitmapFactory.decodeStream(it, null, decodeOpts)
-            } ?: return null
-
-            // Apply rotation if needed
-            if (exifDegrees != 0) {
-                val matrix = android.graphics.Matrix().apply { postRotate(exifDegrees.toFloat()) }
-                android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            } else {
-                bitmap
-            }.also {
-                Log.d(TAG, "loadBitmap: decoded ${it.width}x${it.height} rotation=$exifDegrees°")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not load bitmap for TFLite: ${e.message}")
-            null
-        }
-    }
-
-    private fun buildTfliteResult(
-        imageUri: String,
-        barcode: String?,
-        category: Category,
-        score: Float,
-        verdict: Verdict
-    ): ScanResult {
-        // Authenticity score: (1 - fake_probability) * 100 so 0=fake, 100=authentic
-        val authenticityScore = (1f - score) * 100f
-        val confidence = if (verdict == Verdict.AUTHENTIC) 1f - score else score
-        val product = Product(
-            id = UUID.randomUUID().toString(),
-            name = category.name.lowercase().replaceFirstChar { it.uppercase() } + " Product",
-            barcode = barcode,
-            imageUri = imageUri,
-            category = category,
-            scannedAt = System.currentTimeMillis()
-        )
-        return ScanResult(
-            id = UUID.randomUUID().toString(),
-            product = product,
-            authenticityScore = authenticityScore,
-            verdict = verdict,
-            redFlags = emptyList(),
-            explanation = "On-device pre-scan result (${(confidence * 100).toInt()}% confidence). " +
-                "Cloud verification was skipped.",
-            scannedAt = System.currentTimeMillis()
-        )
     }
 
     private fun deleteLocalImage(imageUri: String) {

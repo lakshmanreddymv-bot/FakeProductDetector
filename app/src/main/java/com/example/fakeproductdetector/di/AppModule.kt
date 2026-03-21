@@ -7,8 +7,6 @@ import com.example.fakeproductdetector.data.api.ClaudeVerificationApi
 import com.example.fakeproductdetector.data.api.GeminiVisionApi
 import com.example.fakeproductdetector.data.local.ScanDao
 import com.example.fakeproductdetector.data.local.ScanDatabase
-import com.example.fakeproductdetector.data.ml.ProductClassifier
-import com.example.fakeproductdetector.data.ml.ProductClassifierInterface
 import com.example.fakeproductdetector.data.repository.ProductRepositoryImpl
 import com.example.fakeproductdetector.domain.repository.ProductRepository
 import com.google.gson.Gson
@@ -130,8 +128,4 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindProductRepository(impl: ProductRepositoryImpl): ProductRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindProductClassifier(impl: ProductClassifier): ProductClassifierInterface
 }

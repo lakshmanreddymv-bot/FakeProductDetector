@@ -30,14 +30,14 @@ class ScanViewModel @Inject constructor(
     private var isScanning = false
     private var countdownJob: Job? = null
 
-    fun scanProduct(imageUri: String, barcode: String?, category: Category, bitmap: android.graphics.Bitmap? = null) {
+    fun scanProduct(imageUri: String, barcode: String?, category: Category) {
         if (isScanning) return
         if (_uiState.value is ScanUiState.RateLimited) return
         isScanning = true
 
         viewModelScope.launch {
-            _uiState.value = ScanUiState.Loading("Pre-scanning on device…")
-            scanProductUseCase(imageUri, barcode, category, bitmap)
+            _uiState.value = ScanUiState.Loading("Scanning…")
+            scanProductUseCase(imageUri, barcode, category)
                 .catch { e ->
                     isScanning = false
                     when (e) {

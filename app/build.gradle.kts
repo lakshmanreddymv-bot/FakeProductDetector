@@ -48,9 +48,7 @@ android {
     testOptions {
         unitTests { isReturnDefaultValues = true }
     }
-    aaptOptions {
-        noCompress += "tflite"
-    }
+
 }
 
 kotlin {
@@ -109,15 +107,6 @@ dependencies {
     // Accompanist Permissions
     implementation(libs.accompanist.permissions)
 
-    // TFLite — exclude the *-api AAR to avoid duplicate-namespace conflict in AGP 9+.
-    // The main tensorflow-lite AAR bundles those classes itself, so they're present at runtime.
-    // compileOnly gives Kotlin visibility of InterpreterApi (supertype) at compile time only.
-    implementation(libs.tflite) {
-        exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
-    }
-    compileOnly("org.tensorflow:tensorflow-lite-api:2.14.0")
-    testImplementation("org.tensorflow:tensorflow-lite-api:2.14.0")
-
     // Coroutines
     implementation(libs.coroutines.android)
 
@@ -135,6 +124,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // ExifInterface — fix libjpeg error 122 on Samsung/CameraX JPEG rotation
-    implementation(libs.exifinterface)
+
 }
