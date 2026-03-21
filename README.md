@@ -464,6 +464,72 @@ OkHttpClient.Builder()
 
 ---
 
+## 📱 Real-World Use Cases
+
+### Use Case 1: Scan with Barcode (Highest Confidence)
+Point the camera at a product barcode — ML Kit detects it automatically, and the green badge appears before you even tap Capture.
+
+```
+Product:  Tylenol Children's Oral Suspension
+Barcode:  ✓ 300450122377 (auto-detected)
+Score:    95 / 100  ✅ AUTHENTIC
+
+Gemini: "UPC barcode resolves to Children's Tylenol Oral Suspension, Berry Flavor.
+Print quality is clear and professional with no spelling errors."
+Claude: Cross-verified and confirmed authentic.
+```
+
+---
+
+### Use Case 2: Scan WITHOUT Barcode (Image-Only — Still Accurate)
+Point the camera at the side panel, back label, or any part of the packaging — even without a barcode, the AI reads the text and analyzes the packaging visually.
+
+```
+Product:  Children's Liquid Acetaminophen
+Barcode:  ⚫ No barcode detected — image-only scan
+Score:    95 / 100  ✅ AUTHENTIC
+
+Gemini analyzed:
+  ✓ Warnings section layout matches genuine Tylenol formatting
+  ✓ Acetaminophen dosage instructions are medically accurate
+  ✓ Overdose warning text matches official McNeil labeling
+  ✓ Directions section fonts and spacing are professional quality
+  ✓ Customer service number format is legitimate
+```
+
+> **Why image-only works:** Gemini 2.5 Flash reads the actual text on the packaging — ingredient lists, warning formats, dosage instructions, phone numbers — and cross-checks them against known authentic product patterns. Just like a pharmacist or customs inspector who can spot a fake by reading the label, not just scanning the barcode.
+
+---
+
+### Use Case 3: Detecting a Fake Product
+When packaging shows inconsistencies — blurry logos, wrong fonts, missing security features — the AI flags them as red flags.
+
+```
+Product:  [Counterfeit Luxury Watch]
+Barcode:  ✓ 123456789
+Score:    12 / 100  ❌ LIKELY FAKE
+
+Red Flags:
+  ⚠ Logo font does not match official brand typography
+  ⚠ Serial number format inconsistent with authentic models
+  ⚠ Hologram sticker appears pixelated / low resolution
+  ⚠ "Swiss Made" text placement is incorrect
+```
+
+---
+
+### Scan Mode Comparison
+
+| | With Barcode | Without Barcode |
+|---|---|---|
+| **Badge color** | 🟢 Green | ⚫ Grey |
+| **Confidence** | Higher | Good |
+| **Product ID** | Barcode + image | Image only |
+| **Works for** | Packaged goods | Any label/packaging |
+| **AI analyzes** | Image + barcode data | Image + text on pack |
+
+---
+
 ## 🧪 How to Test With Fake/Counterfeit Barcodes
 
 ### Method 1: Print Known Fake Barcodes
