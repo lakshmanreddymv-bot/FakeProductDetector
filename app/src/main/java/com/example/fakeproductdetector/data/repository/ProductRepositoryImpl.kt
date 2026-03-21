@@ -2,6 +2,8 @@ package com.example.fakeproductdetector.data.repository
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.util.Log
 import com.example.fakeproductdetector.data.api.ClaudeVerificationApiImpl
@@ -99,6 +101,18 @@ class ProductRepositoryImpl @Inject constructor(
             return@flow
         }
 
+        // ── Step 1b: Offline guard ────────────────────────────────────────
+        if (!isNetworkAvailable()) {
+            val result = buildTfliteResult(imageUri, barcode, category, ProductClassifier.NEUTRAL_SCORE, Verdict.SUSPICIOUS)
+                .copy(
+                    explanation = "No internet connection. On-device scan was inconclusive. " +
+                        "Connect to internet for full AI analysis."
+                )
+            scanDao.insertScan(result.toEntity())
+            emit(ScanEvent.Result(result))
+            return@flow
+        }
+
         // ── Step 2: Gemini Vision (only when TFLite is uncertain) ──────────
         Log.d(TAG, "TFLite uncertain ($tfliteScore) — proceeding to Gemini")
         emit(ScanEvent.Progress("Analyzing with Gemini…"))
@@ -152,6 +166,13 @@ class ProductRepositoryImpl @Inject constructor(
         val entity = scanDao.getScanByIdOnce(id)
         scanDao.deleteScan(id)
         entity?.let { deleteLocalImage(it.product.imageUri) }
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return cm.activeNetwork?.let {
+            cm.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } ?: false
     }
 
     private fun loadBitmap(imageUri: String): android.graphics.Bitmap? =

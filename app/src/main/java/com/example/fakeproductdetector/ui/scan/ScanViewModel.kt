@@ -70,9 +70,17 @@ class ScanViewModel @Inject constructor(
                             subtitle = "Ready to scan again in"
                         )
                         // ── Non-quota errors ───────────────────────────────────────────
-                        else -> _uiState.value = ScanUiState.Error(
-                            e.message ?: "Unknown error occurred"
-                        )
+                        else -> {
+                            val msg = when {
+                                e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
+                                e.message?.contains("No address associated", ignoreCase = true) == true ||
+                                e.message?.contains("failed to connect", ignoreCase = true) == true ||
+                                e.message?.contains("network", ignoreCase = true) == true ->
+                                    "No internet connection. Please connect and try again."
+                                else -> e.message ?: "Unknown error occurred"
+                            }
+                            _uiState.value = ScanUiState.Error(msg)
+                        }
                     }
                 }
                 .collect { event ->

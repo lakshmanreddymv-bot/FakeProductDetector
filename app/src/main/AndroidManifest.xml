@@ -6,6 +6,7 @@
         tools:overrideLibrary="org.tensorflow.lite,org.tensorflow.lite.support" />
 
     <!-- Permissions -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission
