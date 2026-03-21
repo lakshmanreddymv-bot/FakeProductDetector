@@ -87,34 +87,36 @@ class ProductRepositoryImpl @Inject constructor(
         category: Category
     ): Flow<ScanEvent> = flow {
 
-        // ── Step 1: TFLite pre-scan (offline, instant, free) ──────────────
-        val bitmap = loadBitmap(imageUri)
-        val tfliteScore = bitmap?.let { classifier.classify(it) } ?: ProductClassifier.NEUTRAL_SCORE
-        Log.d(TAG, "TFLite score: $tfliteScore")
+        // ── TFLite pre-scan disabled — placeholder model not trained yet ──
+        // Will be re-enabled once product_classifier.tflite is trained.
+        // val bitmap = loadBitmap(imageUri)
+        // val tfliteScore = bitmap?.let { classifier.classify(it) } ?: ProductClassifier.NEUTRAL_SCORE
 
-        if (tfliteScore < TFLITE_AUTHENTIC_THRESHOLD || tfliteScore > TFLITE_FAKE_THRESHOLD) {
-            val verdict = ProductClassifier.scoreToVerdict(tfliteScore)
-            Log.d(TAG, "TFLite high-confidence ($tfliteScore) — skipping cloud, verdict: $verdict")
-            val result = buildTfliteResult(imageUri, barcode, category, tfliteScore, verdict)
-            scanDao.insertScan(result.toEntity())
-            emit(ScanEvent.Result(result))
-            return@flow
-        }
-
-        // ── Step 1b: Offline guard ────────────────────────────────────────
+        // ── Offline guard ─────────────────────────────────────────────────
         if (!isNetworkAvailable()) {
-            val result = buildTfliteResult(imageUri, barcode, category, ProductClassifier.NEUTRAL_SCORE, Verdict.SUSPICIOUS)
-                .copy(
-                    explanation = "No internet connection. On-device scan was inconclusive. " +
-                        "Connect to internet for full AI analysis."
-                )
+            val product = Product(
+                id = UUID.randomUUID().toString(),
+                name = "Unknown Product",
+                barcode = barcode,
+                imageUri = imageUri,
+                category = category,
+                scannedAt = System.currentTimeMillis()
+            )
+            val result = ScanResult(
+                id = UUID.randomUUID().toString(),
+                product = product,
+                authenticityScore = 50f,
+                verdict = Verdict.SUSPICIOUS,
+                redFlags = emptyList(),
+                explanation = "No internet connection. Connect to the internet for full AI analysis.",
+                scannedAt = System.currentTimeMillis()
+            )
             scanDao.insertScan(result.toEntity())
             emit(ScanEvent.Result(result))
             return@flow
         }
 
-        // ── Step 2: Gemini Vision (only when TFLite is uncertain) ──────────
-        Log.d(TAG, "TFLite uncertain ($tfliteScore) — proceeding to Gemini")
+        // ── Step 1: Gemini Vision ─────────────────────────────────────────
         emit(ScanEvent.Progress("Analyzing with Gemini…"))
         val geminiAnalysis = try {
             withRetry { geminiApi.analyze(imageUri, category) }
@@ -133,7 +135,7 @@ class ProductRepositoryImpl @Inject constructor(
             scannedAt = System.currentTimeMillis()
         )
 
-        // ── Step 3: Claude cross-verification (only when Gemini runs) ──────
+        // ── Step 2: Claude cross-verification ────────────────────────────
         emit(ScanEvent.Progress("Verifying with Claude…"))
         val scanResult = try {
             withRetry { claudeApi.verify(geminiAnalysis, product) }.also {
