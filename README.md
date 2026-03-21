@@ -18,7 +18,9 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 
 ---
 
-## 📸 Screenshots
+## 📸 <img width="1080" height="2400" alt="Screenshot_20260320_214050" src="https://github.com/user-attachments/assets/9bb1f3cd-080a-4ed1-90cb-6e53d24d2b1c" />
+Screenshots<img width="1080" height="2400" alt="Screenshot_20260320_213038" src="https://github.com/user-attachments/assets/76fd8185-d10d-41a1-89e4-94e64dd597d1" />
+
 
 > Screenshots will be added here once available. Take them on your device and drop them in the `/screenshots` folder.
 
