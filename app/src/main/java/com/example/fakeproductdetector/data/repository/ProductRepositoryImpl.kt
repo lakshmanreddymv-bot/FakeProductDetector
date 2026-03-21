@@ -175,14 +175,20 @@ class ProductRepositoryImpl @Inject constructor(
         } ?: false
     }
 
-    private fun loadBitmap(imageUri: String): android.graphics.Bitmap? =
-        try {
-            context.contentResolver.openInputStream(Uri.parse(imageUri))
-                ?.use { BitmapFactory.decodeStream(it) }
+    private fun loadBitmap(imageUri: String): android.graphics.Bitmap? {
+        return try {
+            val uri = Uri.parse(imageUri)
+            when (uri.scheme) {
+                "file"    -> BitmapFactory.decodeFile(uri.path)
+                "content" -> context.contentResolver
+                    .openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                else      -> BitmapFactory.decodeFile(imageUri)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Could not load bitmap for TFLite: ${e.message}")
             null
         }
+    }
 
     private fun buildTfliteResult(
         imageUri: String,

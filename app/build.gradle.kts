@@ -116,6 +116,7 @@ dependencies {
         exclude(group = "org.tensorflow", module = "tensorflow-lite-api")
     }
     compileOnly("org.tensorflow:tensorflow-lite-api:2.14.0")
+    testImplementation("org.tensorflow:tensorflow-lite-api:2.14.0")
 
     // Coroutines
     implementation(libs.coroutines.android)
