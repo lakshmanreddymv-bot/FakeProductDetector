@@ -4,9 +4,12 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.example.fakeproductdetector.domain.model.ScanResult
+import kotlinx.coroutines.delay
 import java.util.Locale
 
 private const val TAG = "TTSManager"
+private const val READY_POLL_INTERVAL_MS = 300L
+private const val READY_POLL_MAX_ATTEMPTS = 10
 
 class TTSManager(
     context: Context,
@@ -41,17 +44,32 @@ class TTSManager(
         if (ready) speakNow(text) else pending.add(text)
     }
 
-    fun speakResult(result: ScanResult) {
-        val score = result.authenticityScore.toInt()
-        val speech = buildString {
-            append("Product: ${result.product.name}. ")
-            append("Score: $score out of 100. ")
-            append("Verdict: ${result.verdict.displayName}.")
-            if (result.redFlags.isNotEmpty()) {
-                append(" Warning: ${result.redFlags.joinToString(", ")}.")
-            }
+    /**
+     * Suspending variant: polls [isReady] up to [READY_POLL_MAX_ATTEMPTS] times
+     * (total wait ≈ 3 s) before giving up. Solves the race where [speak] is
+     * called from a LaunchedEffect before [onInit] has completed.
+     */
+    suspend fun speakWhenReady(text: String) {
+        var attempts = 0
+        while (!ready && attempts < READY_POLL_MAX_ATTEMPTS) {
+            delay(READY_POLL_INTERVAL_MS)
+            attempts++
         }
-        speak(speech)
+        if (ready) speak(text)
+        else Log.w(TAG, "speakWhenReady: TTS not ready after ${attempts * READY_POLL_INTERVAL_MS}ms — skipping")
+    }
+
+    /** Builds the result announcement and speaks it via [speakWhenReady]. */
+    suspend fun speakResultWhenReady(result: ScanResult) {
+        speakWhenReady(buildSpeechText(result))
+    }
+
+    /**
+     * Synchronous convenience kept for use-cases that know TTS is already ready
+     * (e.g. replay-on-demand). Tests exercise this path directly.
+     */
+    fun speakResult(result: ScanResult) {
+        speak(buildSpeechText(result))
     }
 
     fun stop() {
@@ -69,5 +87,17 @@ class TTSManager(
 
     private fun speakNow(text: String) {
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
+
+    private fun buildSpeechText(result: ScanResult): String {
+        val score = result.authenticityScore.toInt()
+        return buildString {
+            append("Product: ${result.product.name}. ")
+            append("Score: $score out of 100. ")
+            append("Verdict: ${result.verdict.displayName}.")
+            if (result.redFlags.isNotEmpty()) {
+                append(" Warning: ${result.redFlags.joinToString(", ")}.")
+            }
+        }
     }
 }

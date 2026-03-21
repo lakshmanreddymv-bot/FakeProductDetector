@@ -6,6 +6,7 @@ import com.example.fakeproductdetector.domain.model.Category
 import com.example.fakeproductdetector.domain.model.Product
 import com.example.fakeproductdetector.domain.model.ScanResult
 import com.example.fakeproductdetector.domain.model.Verdict
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -142,6 +143,25 @@ class TTSManagerTest {
             null,
             null
         )
+    }
+
+    // ── speakWhenReady() ──────────────────────────────────────────────────────
+
+    @Test
+    fun `speakWhenReady speaks immediately when TTS is already ready`() = runTest {
+        initTts()
+
+        manager.speakWhenReady("Hello ready")
+
+        verify(mockTts).speak("Hello ready", TextToSpeech.QUEUE_FLUSH, null, null)
+    }
+
+    @Test
+    fun `speakWhenReady does not speak if TTS never becomes ready`() = runTest {
+        // onInit is never called — ready stays false
+        manager.speakWhenReady("Hello never")
+
+        verify(mockTts, never()).speak(any(), any(), any(), any())
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

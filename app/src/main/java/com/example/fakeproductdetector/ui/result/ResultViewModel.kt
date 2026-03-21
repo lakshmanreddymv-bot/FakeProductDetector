@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -42,7 +43,7 @@ class ResultViewModel @Inject constructor(
     }
 
     fun speakResult(result: ScanResult) {
-        ttsManager.speakResult(result)
+        viewModelScope.launch { ttsManager.speakResultWhenReady(result) }
     }
 
     fun stopSpeaking() {
@@ -51,6 +52,7 @@ class ResultViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        ttsManager.shutdown()
+        // stop() only — TTSManager is @Singleton and must not be shut down per-ViewModel
+        ttsManager.stop()
     }
 }
