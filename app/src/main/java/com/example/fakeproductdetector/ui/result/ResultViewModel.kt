@@ -35,6 +35,12 @@ class ResultViewModel @Inject constructor(
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
 
+    init {
+        // Reset singleton mute flag so each new result screen auto-speaks by default.
+        // _isMuted already initialises to false above; we only need to sync ttsManager.
+        ttsManager.isMuted = false
+    }
+
     fun toggleMute() {
         val nowMuted = !_isMuted.value
         _isMuted.value = nowMuted
