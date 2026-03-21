@@ -1,24 +1,17 @@
-# 🔍 FakeProductDetector
+# FakeProductDetector
 
-An AI-powered Android app that detects counterfeit products using **dual-AI verification** — Google Gemini Vision + Claude Haiku — to deliver high-confidence authenticity assessments in seconds.
+An AI-powered Android app that detects counterfeit products using **dual-AI verification** — Google Gemini Vision + Claude Haiku — delivering high-confidence authenticity assessments in seconds.
 
-> 📱 Portfolio Project by **Lakshmana Reddy** | Android Tech Lead | [GitHub](https://github.com/lakshmanreddymv-bot)
+> Portfolio Project by **Lakshmana Reddy** | Android Tech Lead | [GitHub](https://github.com/lakshmanreddymv-bot)
 
----
-
-## ✨ Features
-
-- **AI-Powered Scanning** — Point your camera at any product; Gemini 2.5 Flash analyzes the image using computer vision
-- **Dual-AI Verification** — Claude Haiku cross-validates Gemini's analysis for a refined, comprehensive verdict
-- **Barcode Detection** — ML Kit automatically reads barcodes/QR codes for product identification
-- **Authenticity Score** — Visual 0–100 score with verdict: `AUTHENTIC`, `SUSPICIOUS`, or `LIKELY_FAKE`
-- **Red Flag Detection** — AI identifies specific concerns (mismatched labels, poor print quality, suspicious ingredients, etc.)
-- **Scan History** — All scans saved locally via Room database with timestamps
-- **Smart Error Handling** — Rate limit banners, countdown timers, API fallback logic
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?logo=kotlin&logoColor=white)
+![Android](https://img.shields.io/badge/Android-API%2026+-3DDC84?logo=android&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-API-4285F4?logo=google&logoColor=white)
+![Claude](https://img.shields.io/badge/Claude_Haiku_4.5-API-D97757?logo=anthropic&logoColor=white)
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 | Scan Result (Barcode) | Scan Result (No Barcode) |
 |:---:|:---:|
@@ -27,15 +20,56 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 
 ---
 
-## 🏗️ Architecture
+## Features
 
-### Clean Architecture Overview
+- **CameraX live preview** — real-time camera feed with ML Kit barcode overlay
+- **ML Kit barcode scanning** — on-device, instant, free, works offline
+- **Gemini 2.5 Flash Vision** — analyzes product packaging visually (text, logos, fonts, print quality)
+- **Claude Haiku 4.5 verification** — cross-validates Gemini's reasoning for a refined verdict
+- **Authenticity score 0–100** — clear verdict: `AUTHENTIC`, `SUSPICIOUS`, or `LIKELY_FAKE`
+- **Red flag detection** — specific concerns flagged (mismatched labels, blurry print, wrong fonts, etc.)
+- **TTS voice output** — result is read aloud after every scan
+- **Room scan history** — all scans persisted locally with timestamps
+- **Swipe-to-delete** — remove individual history entries with a swipe gesture
+- **Offline detection** — friendly message shown when no internet is available
+- **Rate limit handling** — countdown banners for Gemini 429 / daily quota errors
+- **Clean Architecture + MVVM + Hilt + UDF**
+
+---
+
+## How It Works — AI Pipeline
+
+```mermaid
+flowchart LR
+    CAM([Camera]) --> ML[ML Kit\nBarcode]
+    ML --> GEM[Gemini 2.5 Flash\nVision Analysis]
+    GEM --> CLU[Claude Haiku\nCross-Verification]
+    CLU --> RES([Result])
+    RES --> TTS[TTS\nVoice Output]
+
+    style CAM fill:#e65100,color:#fff
+    style ML  fill:#f57f17,color:#fff
+    style GEM fill:#1565c0,color:#fff
+    style CLU fill:#2e7d32,color:#fff
+    style RES fill:#e65100,color:#fff
+    style TTS fill:#4a148c,color:#fff
+```
+
+1. **ML Kit** reads any barcode in the live camera frame in real-time before you tap Capture.
+2. **Gemini 2.5 Flash** receives the captured JPEG and analyzes packaging visually — logos, text, fonts, print quality, barcode data.
+3. **Claude Haiku** receives Gemini's text analysis (no image) and cross-checks the reasoning for a refined final verdict.
+4. **TTS** reads the result aloud. If Claude fails, Gemini's result is used directly — the app never crashes.
+
+---
+
+## Architecture
+
+### Clean Architecture
 
 ```mermaid
 graph TB
     subgraph UI["UI Layer — Jetpack Compose"]
         SC[ScanScreen] --> SVM[ScanViewModel]
-        SVM --> SS[ScanUiState]
         RS[ResultScreen]
         HS[HistoryScreen] --> HVM[HistoryViewModel]
     end
@@ -44,7 +78,6 @@ graph TB
         SUC[ScanProductUseCase]
         GHC[GetScanHistoryUseCase]
         PR[ProductRepository interface]
-        MOD[Product / ScanResult / Verdict / Category]
     end
 
     subgraph DATA["Data Layer"]
@@ -52,10 +85,6 @@ graph TB
         GVI[GeminiVisionApiImpl]
         CAI[ClaudeVerificationApiImpl]
         DB[Room Database]
-    end
-
-    subgraph DI["DI — Hilt"]
-        AM[AppModule]
     end
 
     SVM --> SUC
@@ -66,17 +95,28 @@ graph TB
     PRI --> GVI
     PRI --> CAI
     PRI --> DB
-    AM -.->|provides| PRI
 
-    style UI fill:#1a237e,color:#fff
+    style UI     fill:#1a237e,color:#fff
     style DOMAIN fill:#1b5e20,color:#fff
-    style DATA fill:#b71c1c,color:#fff
-    style DI fill:#4a148c,color:#fff
+    style DATA   fill:#b71c1c,color:#fff
 ```
 
----
+### Unidirectional Data Flow (UDF)
 
-### 🤖 3-Step AI Scan Pipeline
+```mermaid
+graph LR
+    TAP([User Taps Capture]) --> VM[ViewModel]
+    VM --> UC[ScanProductUseCase]
+    UC --> REPO[ProductRepository]
+    REPO -->|ScanEvent| SF[StateFlow]
+    SF --> UI[ScanScreen recomposes]
+
+    style TAP  fill:#e65100,color:#fff
+    style UC   fill:#2e7d32,color:#fff
+    style UI   fill:#1565c0,color:#fff
+```
+
+### Scan Sequence
 
 ```mermaid
 sequenceDiagram
@@ -84,132 +124,159 @@ sequenceDiagram
     participant SC as ScanScreen
     participant VM as ScanViewModel
     participant REPO as Repository
-    participant TFL as TFLite (on-device)
     participant GEM as Gemini Vision
     participant CLU as Claude Haiku
     participant DB as Room DB
 
     User->>SC: Tap Capture
-    SC->>VM: scanProduct(uri, barcode)
-    VM->>VM: emit Loading("Pre-scanning on device…")
+    SC->>VM: scanProduct(uri, barcode, category)
     VM->>REPO: scanProduct(...)
 
-    REPO->>TFL: classify(bitmap)
-    TFL-->>REPO: score 0.0–1.0 (instant · free · offline)
-
-    alt score < 0.05 — ≥95% confident AUTHENTIC
-        Note over REPO,TFL: High confidence → skip cloud APIs
-        REPO->>DB: save TFLite result
-        REPO-->>VM: ScanEvent.Result
-    else score > 0.90 — ≥90% confident LIKELY_FAKE
-        Note over REPO,TFL: High confidence → skip cloud APIs
-        REPO->>DB: save TFLite result
-        REPO-->>VM: ScanEvent.Result
-    else score 0.05–0.90 — uncertain
-        REPO->>VM: ScanEvent.Progress("Analyzing with Gemini…")
+    REPO->>REPO: Check network
+    alt No internet
+        REPO-->>VM: ScanEvent.Result (offline message)
+    else Online
         REPO->>GEM: POST image + prompt
-        GEM-->>REPO: score, verdict, redFlags
-        REPO->>VM: ScanEvent.Progress("Verifying with Claude…")
+        GEM-->>REPO: score + verdict + redFlags
         REPO->>CLU: POST Gemini analysis
         CLU-->>REPO: refined verdict
         REPO->>DB: save ScanEntity
         REPO-->>VM: ScanEvent.Result
     end
 
-    VM->>VM: emit Success
     VM-->>SC: navigate to ResultScreen
 
     Note over GEM,CLU: If Claude fails → Gemini result used directly
 ```
 
----
-
-### 📂 Project Structure
+### Project Structure
 
 ```
 FakeProductDetector/
-├── domain/                         ← Pure Kotlin, zero Android dependencies
-│   ├── model/
-│   │   ├── Product.kt              # id, name, barcode, imageUri, category
-│   │   ├── ScanResult.kt           # id, product, score, verdict, redFlags, explanation
-│   │   ├── Verdict.kt              # AUTHENTIC | SUSPICIOUS | LIKELY_FAKE
-│   │   └── Category.kt             # MEDICINE | ELECTRONICS | LUXURY | FOOD | OTHER
+├── domain/                          ← Pure Kotlin, zero Android dependencies
+│   ├── model/                       # Product, ScanResult, Verdict, Category
 │   ├── repository/
-│   │   └── ProductRepository.kt    # Interface — scanProduct(), getScanHistory()
+│   │   └── ProductRepository.kt     # Interface
 │   └── usecase/
-│       ├── ScanProductUseCase.kt   # Orchestrates scan → verify pipeline
+│       ├── ScanProductUseCase.kt
 │       └── GetScanHistoryUseCase.kt
 │
-├── data/                           ← Android & network implementations
+├── data/
 │   ├── api/
-│   │   ├── GeminiVisionApi.kt          # Retrofit interface
-│   │   ├── GeminiVisionApiImpl.kt      # Image compress → base64 → Gemini
-│   │   ├── ClaudeVerificationApi.kt    # Retrofit interface
-│   │   ├── ClaudeVerificationApiImpl.kt# Cross-verify with Claude Haiku
-│   │   └── GeminiQuotaError.kt         # Sealed: TokenRPM│RequestRPM│Daily│Generic
-│   ├── local/
-│   │   ├── ScanEntity.kt           # Room entity
-│   │   ├── ScanDao.kt              # insert, getAll, getById, delete
-│   │   └── ScanDatabase.kt         # RoomDatabase singleton
+│   │   ├── GeminiVisionApiImpl.kt   # Image → base64 → Gemini
+│   │   ├── ClaudeVerificationApiImpl.kt
+│   │   └── GeminiQuotaError.kt      # Sealed: TokenRPM | RequestRPM | Daily
+│   ├── local/                       # Room: ScanEntity, ScanDao, ScanDatabase
 │   └── repository/
-│       └── ProductRepositoryImpl.kt # Gemini → Claude → Room pipeline
+│       └── ProductRepositoryImpl.kt # Offline guard → Gemini → Claude → Room
 │
 ├── di/
-│   └── AppModule.kt                # Hilt: 2× Retrofit, OkHttp (30/60s), Room
+│   └── AppModule.kt                 # Hilt: 2× Retrofit, OkHttp, Room
 │
-├── ui/
-│   ├── scan/
-│   │   ├── ScanScreen.kt           # CameraX preview + ML Kit + permission gate
-│   │   ├── ScanViewModel.kt        # UDF: events in → UiState out
-│   │   └── ScanUiState.kt          # Idle│Loading│Success│Error│RateLimited
-│   ├── result/
-│   │   └── ResultScreen.kt         # Score card + verdict + red flags + explanation
-│   ├── history/
-│   │   ├── HistoryScreen.kt        # Past scans list
-│   │   └── HistoryViewModel.kt
-│   └── components/
-│       ├── AuthenticityScoreCard.kt # Circular score gauge (0–100)
-│       └── RateLimitBanner.kt      # Red/Purple countdown banner
-│
-└── MainActivity.kt                 # NavHost + Bottom navigation
+└── ui/
+    ├── scan/    # ScanScreen, ScanViewModel, ScanUiState
+    ├── result/  # ResultScreen, ResultViewModel
+    ├── history/ # HistoryScreen, HistoryViewModel
+    └── tts/     # TTSManager
 ```
 
 ---
 
-### 🔄 Unidirectional Data Flow (UDF)
+## Role of Each AI / Tool
+
+### ML Kit vs Gemini vs Claude
+
+| | ML Kit | Gemini 2.5 Flash | Claude Haiku |
+|---|---|---|---|
+| **Role** | Barcode Reader | Vision Scanner | Verifier |
+| **When runs** | Every live frame | Once on capture | After Gemini |
+| **Input** | Live camera frame | JPEG photo | Gemini's text output |
+| **Output** | Barcode string | Score + verdict + flags | Refined verdict |
+| **Needs internet** | No — on-device | Yes | Yes |
+| **Costs money** | Free | ~$0.0001/scan | ~$0.0001/scan |
+| **Checks authenticity** | No | Yes — detailed | Yes — reasoned |
+
+### Gemini vs Claude
+
+| | Gemini 2.5 Flash | Claude Haiku |
+|---|---|---|
+| **Role** | The Scanner | The Verifier |
+| **Can see images?** | Yes | No |
+| **Analogy** | Lab technician running tests | Senior doctor reviewing results |
+
+### How They Work Together
 
 ```mermaid
-graph LR
-    TAP([User Taps Capture]) --> EV[ViewModel handles event]
-    EV --> IS{isScanning?}
-    IS -->|true| IGN[Ignore — prevent duplicates]
-    IS -->|false| UC[ScanProductUseCase]
-    UC --> REPO[ProductRepository]
-    REPO -->|Result| ST[StateFlow emit]
-    ST --> UI[ScanScreen recomposes]
+flowchart LR
+    IMG([Camera Image]) --> GEM
 
-    style TAP fill:#e65100,color:#fff
-    style UC fill:#2e7d32,color:#fff
-    style UI fill:#1565c0,color:#fff
+    subgraph GEM["Gemini — SCANNER"]
+        G1[Reads image visually\nlogos · text · fonts · barcode]
+        G1 --> G2[Returns score + verdict + redFlags]
+    end
+
+    subgraph CLU["Claude — VERIFIER"]
+        C1[Receives text analysis\nno image]
+        C1 --> C2[Cross-checks reasoning\nRefines verdict]
+    end
+
+    GEM --> CLU
+    CLU --> OUT([Final Result])
+
+    style GEM fill:#1565c0,color:#fff
+    style CLU fill:#2e7d32,color:#fff
+    style IMG fill:#e65100,color:#fff
+    style OUT fill:#e65100,color:#fff
 ```
 
-**Pattern:** Clean Architecture + MVVM + Unidirectional Data Flow
+### Where ML Kit Runs
+
+```mermaid
+flowchart TD
+    CAM([Live Camera Feed])
+
+    subgraph REALTIME["Real-Time — Every Frame"]
+        ML[ML Kit Barcode Scanner\nOn-device · No internet · Free]
+        ML --> BD{Barcode found?}
+        BD -->|Yes| GB[Green badge — barcode shown]
+        BD -->|No| GR[Grey badge — no barcode]
+    end
+
+    CAM --> ML
+
+    TAP([User Taps Capture]) --> PHOTO
+
+    subgraph ONCAPTURE["On Capture — Once per scan"]
+        PHOTO[JPEG photo saved]
+        PHOTO --> GEM2[Gemini Vision]
+        GEM2 --> CLU2[Claude Haiku]
+        CLU2 --> RES[Result shown + TTS]
+    end
+
+    GB -.->|barcode passed along| PHOTO
+    GR -.->|null barcode| PHOTO
+
+    style REALTIME   fill:#1565c0,color:#fff
+    style ONCAPTURE  fill:#2e7d32,color:#fff
+    style CAM        fill:#e65100,color:#fff
+    style TAP        fill:#e65100,color:#fff
+```
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Language | Kotlin |
-| UI | Jetpack Compose + Material3 |
-| Architecture | Clean Architecture + MVVM |
+| Language | Kotlin 2.2.10 |
+| UI | Jetpack Compose + Material 3 |
+| Architecture | Clean Architecture + MVVM + UDF |
 | DI | Hilt 2.59.1 |
 | Camera | CameraX 1.3.4 |
 | Barcode | ML Kit Barcode Scanning 17.3.0 |
-| On-Device ML | TensorFlow Lite 2.14.0 + MobileNetV3 |
-| AI - Vision | Google Gemini 2.5 Flash (v1beta) |
-| AI - Verification | Anthropic Claude Haiku 4.5 |
+| AI — Vision | Google Gemini 2.5 Flash (v1beta) |
+| AI — Verification | Anthropic Claude Haiku 4.5 |
+| TTS | Android TextToSpeech |
 | Networking | Retrofit 2.11.0 + OkHttp 4.12.0 |
 | Database | Room 2.7.1 |
 | Image Loading | Coil 2.6.0 |
@@ -218,232 +285,96 @@ graph LR
 
 ---
 
-## 🧠 Model Training
-
-The app ships with a **placeholder** `.tflite` file (`app/src/main/assets/product_classifier.tflite`).
-When no real model is loaded, `classify()` returns the neutral score `0.5`, which falls in the
-uncertain range and forwards every scan to Gemini + Claude — keeping accuracy intact while the
-model is absent.
-
-### Train your own MobileNetV3 classifier
-
-A Google Colab notebook is included at `scripts/train_product_classifier.ipynb`.
-It handles everything end-to-end:
-
-```
-scripts/
-├── prepare_dataset.py              ← scaffold dataset folders + print collection guide
-├── train_product_classifier.ipynb  ← full Colab training notebook
-└── README.md                       ← dataset collection guide (sources, minimums)
-```
-
-#### Step 1 — Scaffold the dataset folders
-
-```bash
-python scripts/prepare_dataset.py
-```
-
-Creates `dataset/train/{authentic,fake}` and `dataset/validation/{authentic,fake}`.
-Follow the printed instructions to collect 300–500 images per class.
-
-#### Step 2 — Open the notebook in Google Colab
-
-Upload `scripts/train_product_classifier.ipynb` to [colab.research.google.com](https://colab.research.google.com)
-or open it from Google Drive. Connect to a **GPU runtime** (free T4 is sufficient).
-
-#### Step 3 — Train
-
-The notebook handles all steps automatically:
-
-| Step | What it does |
-|------|-------------|
-| Environment setup | Install TFLite, sklearn, matplotlib |
-| Data loading | `ImageDataGenerator` with augmentation (flip, zoom, rotation) |
-| Phase 1 (20 epochs) | Train custom head; MobileNetV3Small base frozen |
-| Phase 2 (10 epochs) | Unfreeze top 30 layers; fine-tune at lr=1e-5 |
-| Evaluation | Accuracy, precision, recall, F1, confusion matrix |
-| INT8 quantization | 4× size reduction; representative dataset calibration |
-| Android export | Saves `product_classifier.tflite` |
-
-**Expected accuracy:** > 85% on the validation set (>90% with 500+ images per class)
-
-#### Step 4 — Replace the placeholder model
-
-```bash
-# After training, copy the output file to the app assets:
-cp /content/product_classifier.tflite \
-   app/src/main/assets/product_classifier.tflite
-```
-
-Rebuild the app — TFLite inference activates automatically on the next run.
-
-### Cost & performance
-
-| Metric | Value |
-|--------|-------|
-| Training cost | **$0** (Google Colab free tier) |
-| Inference time | < 50 ms on a mid-range device |
-| Model size (INT8) | ~1 MB |
-| On-device — needs internet | ❌ No |
-| High-confidence bypass rate | Depends on dataset quality |
-
-### Score → Verdict mapping
-
-| TFLite score | Verdict | Action |
-|-------------|---------|--------|
-| < 0.05 | AUTHENTIC (≥95% confident) | Skip Gemini — return instantly |
-| 0.05 – 0.90 | Uncertain | Forward to Gemini + Claude |
-| > 0.90 | LIKELY_FAKE (≥90% confident) | Skip Gemini — return instantly |
-
----
-
-## ⚙️ Setup
+## Setup
 
 ### Prerequisites
+
 - Android Studio Hedgehog or newer
-- Android device/emulator with camera (API 24+)
-- Google Gemini API key (with billing enabled)
+- Android device / emulator with camera (API 26+)
+- Google Gemini API key (billing enabled)
 - Anthropic API key
 
-### 1. Clone the repository
+### 1. Clone
+
 ```bash
 git clone https://github.com/lakshmanreddymv-bot/FakeProductDetector.git
 cd FakeProductDetector
 ```
 
 ### 2. Add API keys
-Create `local.properties` in the project root (do **not** commit this file):
+
+Create `local.properties` in the project root — **do not commit this file**:
+
 ```properties
 sdk.dir=/path/to/your/Android/sdk
 gemini.api.key=YOUR_GEMINI_API_KEY_HERE
 anthropic.api.key=YOUR_ANTHROPIC_API_KEY_HERE
 ```
 
-### 3. Enable Gemini API billing
+### 3. Enable Gemini billing
+
 - Visit [Google AI Studio](https://aistudio.google.com/) → Get API Key
 - Enable billing at [Google Cloud Console](https://console.cloud.google.com/billing)
 - The app uses `gemini-2.5-flash` which requires a billing-enabled project
 
-> **Cost per scan** depends on TFLite confidence:
->
-> | Scan type | Steps used | Cost |
-> |-----------|-----------|------|
-> | High-confidence (TFLite only) | TFLite → result | **$0.00** |
-> | Low-confidence (full pipeline) | TFLite → Gemini → Claude | **~$0.0002** |
->
-> High-confidence scans are completely free — no API call is made. For uncertain scans,
-> Gemini + Claude together cost roughly $0.0002 (Gemini ~$0.0001 + Claude ~$0.0001).
+**Cost per scan:** Gemini + Claude together cost roughly **$0.0002** per scan (~$0.0001 each).
 
-### 4. Build & Run
+### 4. Build & run
+
 ```bash
 ./gradlew assembleDebug
 ```
-Or open in Android Studio → Run ▶️
+
+Or open in Android Studio → Run ▶
 
 ---
 
-## 📋 Permissions Required
+## Unit Tests
 
-```xml
-<uses-permission android:name="android.permission.CAMERA" />
-<uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-```
-
-Camera permission is requested at runtime with a graceful fallback screen.
-
----
-
-## 🚦 Rate Limit Handling
-
-The free Gemini tier allows 15 requests/minute. The app handles this gracefully:
-
-- **RPM exceeded** → Red banner + 60-second countdown timer
-- **Daily limit** → Purple banner + 5-minute countdown
-- **No retry on 429** — avoids compounding rate limit issues
-- **Double-tap guard** — `isScanning` flag prevents duplicate requests
-
----
-
-## 📂 Project Structure
+### Structure
 
 ```
-app/
-├── src/main/
-│   ├── java/com/example/fakeproductdetector/
-│   │   ├── data/
-│   │   ├── di/
-│   │   ├── domain/
-│   │   └── ui/
-│   └── res/
-├── build.gradle.kts
-└── proguard-rules.pro
-local.properties          ← API keys (gitignored)
+app/src/test/
+└── com/example/fakeproductdetector/
+    ├── data/api/
+    │   ├── GeminiQuotaErrorTest.kt       ← Sealed class coverage
+    │   └── GeminiVisionApiImplTest.kt    ← JSON parsing, verdict/score parsing
+    ├── domain/
+    │   ├── model/ScanResultTest.kt       ← Model classes, enums
+    │   └── usecase/ScanProductUseCaseTest.kt  ← ScanEvent flow, Mockito
+    └── ui/scan/ScanUiStateTest.kt        ← All sealed UI states
 ```
 
----
+### Run
 
-## 🔒 Security Notes
-
-- API keys are stored in `local.properties` and injected via `BuildConfig` — never hardcoded
-- `local.properties` is listed in `.gitignore`
-- All network calls use HTTPS
-
----
-
-## 🧪 Unit Testing (90%+ Coverage)
-
-### Test Structure
-```
-app/src/test/java/com/example/fakeproductdetector/
-├── data/
-│   ├── api/
-│   │   ├── GeminiQuotaErrorTest.kt    ← Sealed class coverage, when() exhaustion
-│   │   └── GeminiVisionApiImplTest.kt ← JSON parsing, verdict parsing, score parsing
-│   └── ml/
-│       └── ProductClassifierTest.kt   ← scoreToVerdict mapping, mock Interpreter, tensor shape
-├── domain/
-│   ├── model/
-│   │   └── ScanResultTest.kt          ← Model classes, enums, data integrity
-│   └── usecase/
-│       └── ScanProductUseCaseTest.kt  ← ScanEvent flow, repository delegation (Mockito)
-└── ui/scan/
-    └── ScanUiStateTest.kt             ← All sealed UI states, edge cases
-```
-
-### Running Tests
 ```bash
-./gradlew test                    # Run all unit tests
-./gradlew testDebugUnitTest       # Run debug variant only
+./gradlew test                      # All unit tests
+./gradlew testDebugUnitTest         # Debug variant only
 ./gradlew testDebugUnitTest --info  # Verbose output
 ```
 
-### Coverage Report
-```bash
-./gradlew testDebugUnitTest jacocoTestReport
-# Report: app/build/reports/jacoco/testDebugUnitTest/html/index.html
-```
+### Coverage
 
-### What's Tested
-| Area | Tests | Coverage |
-|------|-------|----------|
-| Domain models (Product, ScanResult, Verdict, Category) | 10 | ✅ 100% |
-| Sealed UI states (Idle/Loading/Error/RateLimited/Success) | 10 | ✅ 100% |
-| GeminiQuotaError sealed class + when() expressions | 6 | ✅ 100% |
-| JSON extraction + verdict/score parsing logic | 13 | ✅ 100% |
-| ScanProductUseCase with mocked repository (ScanEvent flow) | 7 | ✅ 100% |
-| ProductClassifier — scoreToVerdict, mock Interpreter, tensor shape | 11 | ✅ 100% |
+| Area | Tests | Status |
+|------|-------|--------|
+| Domain models (Product, ScanResult, Verdict, Category) | 10 | 100% |
+| Sealed UI states (Idle / Loading / Error / RateLimited / Success) | 10 | 100% |
+| GeminiQuotaError sealed class | 6 | 100% |
+| JSON extraction + verdict/score parsing | 13 | 100% |
+| ScanProductUseCase — mocked repository, ScanEvent flow | 7 | 100% |
 
 ---
 
-## 🐛 Issues Faced & How We Solved Them
+## Issues & Fixes
 
-This section documents every real bug we hit during development — useful for anyone forking this project or learning Android AI development.
+Real bugs encountered during development — useful for anyone building Android AI apps.
 
-### Issue 1: Black Screen on Camera Launch
-**Problem:** Camera preview showed a black screen after granting permission.  
-**Root Cause:** App jumped straight into camera without checking if runtime CAMERA permission was actually granted.  
-**Fix:** Added `rememberLauncherForActivityResult(RequestPermission)` + `hasCameraPermission` state gate in `ScanScreen`. Shows a dedicated "Grant Camera Permission" UI if denied.
+### 1. Black Screen on Camera Launch
+
+**Problem:** Camera preview showed a black screen after granting permission.
+**Cause:** App jumped straight into camera without verifying runtime CAMERA permission was granted.
+**Fix:** Added `rememberLauncherForActivityResult(RequestPermission)` + `hasCameraPermission` state gate in `ScanScreen`.
+
 ```kotlin
 var hasCameraPermission by remember {
     mutableStateOf(context.checkSelfPermission(CAMERA) == PERMISSION_GRANTED)
@@ -452,13 +383,15 @@ var hasCameraPermission by remember {
 
 ---
 
-### Issue 2: HTTP 404 — Wrong Gemini Endpoint
-**First attempt:** `v1beta/models/gemini-2.0-flash` → 404  
-**Second attempt:** `v1/models/gemini-2.0-flash` → 404  
-**Root Cause (confirmed from API logs):**  
-> "This model models/gemini-2.0-flash is no longer available to new users."
+### 2. HTTP 404 — Wrong Gemini Endpoint
 
-**Fix:** Switched to `v1beta/models/gemini-2.5-flash` — the current recommended model for new billing users (as of March 2026).
+**Attempts:**
+- `v1beta/models/gemini-2.0-flash` → 404
+- `v1/models/gemini-2.0-flash` → 404
+
+**Cause:** `gemini-2.0-flash` is no longer available to new users.
+**Fix:** Switched to `v1beta/models/gemini-2.5-flash`.
+
 ```kotlin
 @POST("v1beta/models/gemini-2.5-flash:generateContent")
 suspend fun generateContent(@Body request: GeminiRequest): GeminiResponse
@@ -466,44 +399,39 @@ suspend fun generateContent(@Body request: GeminiRequest): GeminiResponse
 
 ---
 
-### Issue 3: HTTP 429 Rate Limits — Retry Loop
-**Problem:** On free tier (15 RPM), a failed scan would trigger 3 retries, making 3× 429 errors and extending the cooldown.  
-**Fix:** Removed all retry logic on 429. Throw immediately, show countdown banner. Added `isScanning` guard flag.
-```kotlin
-if (response.code() == 429) {
-    throw IOException("Rate limited: ${response.body()?.string()}")
-}
-```
+### 3. HTTP 429 — Retry Loop Compounding Rate Limits
+
+**Problem:** On the free tier (15 RPM), failed scans triggered 3 retries → 3× 429 errors, extending the cooldown.
+**Fix:** Removed all retry logic on 429. Throw immediately, show countdown banner. Added `isScanning` guard.
 
 ---
 
-### Issue 4: Duplicate Functions — Build Error
-**Problem:** `str_replace` left duplicate `parseResponse` and `extractJson` functions in `GeminiVisionApiImpl`.  
-**Fix:** Full file overwrite using `create_new_file` with `overwrite:true` to eliminate duplicates.
+### 4. Duplicate Functions — Build Error
+
+**Problem:** `str_replace` left duplicate `parseResponse` and `extractJson` functions in `GeminiVisionApiImpl`.
+**Fix:** Full file overwrite to eliminate duplicates cleanly.
 
 ---
 
-### Issue 5: Wrong Claude Model ID
-**Problem:** `claude-haiku-4-5` → 404 from Claude API.  
-**Fix:** Correct model ID is `claude-haiku-4-5-20251001`.  
-(Note: current version uses `claude-haiku-4-5` — verify at docs.anthropic.com)
+### 5. Wrong Claude Model ID
+
+**Problem:** `claude-haiku-4-5` → 404 from Claude API.
+**Fix:** Correct model ID is `claude-haiku-4-5-20251001`.
 
 ---
 
-### Issue 6: Image Too Large — OkHttp Timeout
-**Problem:** Full-resolution camera images (5MB+) caused 60s timeouts on Gemini API.  
-**Fix:** Added `compressImage()` — scales to max 1024px, JPEG 85%, reduces 5MB → ~150KB.
-```kotlin
-fun compressImage(uri: String, context: Context): ByteArray {
-    // Scale to max 1024px on longest side, JPEG 85% quality
-}
-```
+### 6. Image Too Large — OkHttp Timeout
+
+**Problem:** Full-resolution camera images (5 MB+) caused 60s timeouts on Gemini API.
+**Fix:** Added `compressImage()` — scales to max 1024 px, JPEG 85%, reducing 5 MB → ~150 KB.
 
 ---
 
-### Issue 7: OkHttp Default Timeouts Too Short
-**Problem:** Gemini Vision analysis takes 5–10s; default OkHttp timeout is 10s causing sporadic failures.  
+### 7. OkHttp Default Timeouts Too Short
+
+**Problem:** Gemini Vision analysis takes 5–10s; OkHttp's 10s default caused sporadic failures.
 **Fix:**
+
 ```kotlin
 OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
@@ -513,224 +441,58 @@ OkHttpClient.Builder()
 
 ---
 
-### Issue 8: Billing Required for v1 Endpoint
-**Problem:** After enabling Google Cloud billing, the `v1` endpoint still returned 404.  
-**Root Cause:** `v1/models/gemini-2.0-flash` is not available even with billing — `gemini-2.0-flash` is restricted to existing (pre-March 2026) customers.  
+### 8. Billing Required but v1 Endpoint Still 404
+
+**Problem:** After enabling Google Cloud billing, `v1/models/gemini-2.0-flash` still returned 404.
+**Cause:** `gemini-2.0-flash` on `v1` is restricted to pre-March 2026 customers.
 **Fix:** Use `v1beta/models/gemini-2.5-flash` — available to all new billing users.
 
 ---
 
-## 🤖 Gemini vs Claude — What Each AI Does
+## Real-World Use Cases
 
-### In Simple Terms
+### With Barcode — Highest Confidence
 
-| | Gemini 2.5 Flash | Claude Haiku |
-|---|---|---|
-| **Role** | 👁️ The Scanner | 🧠 The Verifier |
-| **Can see images?** | ✅ Yes | ❌ No |
-| **Input** | Camera image | Gemini's text analysis |
-| **Does what?** | Reads packaging visually | Cross-checks the reasoning |
-| **Analogy** | Lab technician running tests | Senior doctor reviewing results |
-
----
-
-### How They Work Together
-
-```mermaid
-flowchart LR
-    IMG([📸 Camera Image]) --> GEM
-
-    subgraph GEM["👁️ Gemini — SCANNER"]
-        G1[Reads image visually\nlogos · text · fonts · barcode]
-        G1 --> G2[Returns score + verdict + redFlags]
-    end
-
-    subgraph CLU["🧠 Claude — VERIFIER"]
-        C1[Receives text analysis\nno image]
-        C1 --> C2[Cross-checks reasoning\nRefines verdict]
-    end
-
-    GEM --> CLU
-    CLU --> OUT([✅ Final Result])
-
-    style GEM fill:#1565c0,color:#fff
-    style CLU fill:#2e7d32,color:#fff
-    style IMG fill:#e65100,color:#fff
-    style OUT fill:#e65100,color:#fff
-```
-
----
-
-### What happens if Claude fails?
-
-```mermaid
-flowchart LR
-    A[Gemini ✅] -->|analysis| B{Claude?}
-    B -->|✅ Available| C[Refined result\nDual-AI verdict]
-    B -->|❌ Fails / Rate limited| D[Gemini result used directly\nGraceful fallback]
-    C --> E([User sees result])
-    D --> E
-
-    style B fill:#f57f17,color:#fff
-    style C fill:#2e7d32,color:#fff
-    style D fill:#b71c1c,color:#fff
-```
-
-> **The app never crashes** — if Claude is unavailable, Gemini's analysis is shown directly with a note `[Gemini only — Claude verification skipped]`
-
----
-
-### Real Example From Our Logs
-
-```
-📸 Image sent to Gemini
-        ↓
-👁️  GEMINI analyzed:
-    - Read "Warnings", "Directions", "Acetaminophen" text
-    - Verified dosage instructions are medically accurate
-    - Checked print quality → professional, no blurring
-    - Score: 95/100  Verdict: AUTHENTIC
-        ↓
-🧠  CLAUDE verified:
-    - Gemini's reasoning is sound
-    - UPC barcode cross-references correctly
-    - No inconsistencies in the analysis
-    - Confirmed Score: 95/100  Verdict: AUTHENTIC ✅
-        ↓
-✅  User sees: "Tylenol Children's Oral Suspension — 95/100 Authentic"
-```
-
----
-
----
-
-## 🔍 Role of ML Kit
-
-### One Line Answer
-> **ML Kit reads the barcode silently in real-time on every camera frame — BEFORE you even tap Capture.**
-
----
-
-### Where Each Tool Runs
-
-```mermaid
-flowchart TD
-    CAM([📷 Live Camera Feed])
-
-    subgraph REALTIME["⚡ Real-Time — Every Frame"]
-        ML[ML Kit Barcode Scanner\nRuns on-device · No internet · Free]
-        ML --> BD{Barcode found?}
-        BD -->|Yes| GB[🟢 Green badge appears\ne.g. '300450122377']
-        BD -->|No| GR[⚫ Grey badge appears\n'No barcode detected']
-    end
-
-    CAM --> ML
-
-    TAP([👆 User Taps Capture]) --> PHOTO
-
-    subgraph ONCAPTURE["📸 On Capture — Once per scan"]
-        PHOTO[JPEG photo saved]
-        PHOTO --> GEM[Gemini Vision\nAnalyzes the image]
-        GEM --> CLU[Claude Haiku\nVerifies the analysis]
-        CLU --> RES[✅ Result shown]
-    end
-
-    GB -.->|barcode passed along| PHOTO
-    GR -.->|null barcode passed| PHOTO
-
-    style REALTIME fill:#1565c0,color:#fff
-    style ONCAPTURE fill:#2e7d32,color:#fff
-    style CAM fill:#e65100,color:#fff
-    style TAP fill:#e65100,color:#fff
-```
-
----
-
-### ML Kit vs TFLite vs Gemini vs Claude — Side by Side
-
-| | ML Kit | TFLite | Gemini 2.5 Flash | Claude Haiku |
-|---|---|---|---|---|
-| **Role** | 🔲 Barcode Reader | ⚡ Pre-scan Filter | 👁️ Vision Scanner | 🧠 Verifier |
-| **When runs** | Every live frame | Once on capture | Only if TFLite uncertain | Only if Gemini runs |
-| **Input** | Live camera frame | Bitmap (224×224) | JPEG photo | Gemini's text output |
-| **Output** | Barcode string | Fake probability [0–1] | Score + verdict + flags | Refined verdict |
-| **Needs internet** | ❌ No — on-device | ❌ No — on-device | ✅ Yes | ✅ Yes |
-| **Costs money** | ❌ Free | ❌ Free | ✅ ~$0.0001/scan | ✅ ~$0.0001/scan |
-| **Can see image** | ✅ Yes (frames) | ✅ Yes (photo) | ✅ Yes (photo) | ❌ No (text only) |
-| **Checks authenticity** | ❌ No | ✅ Yes (binary) | ✅ Yes (detailed) | ✅ Yes (reasoned) |
-
----
-
-### Simple Analogy — Passport Check at Airport
-
-```mermaid
-flowchart LR
-    P([🛂 Passport Check]) --> ML2
-    ML2["🔲 ML Kit\nScans MRZ number\nat the bottom"]
-    ML2 --> GEM2["👁️ Gemini\nOfficer inspects photo,\nwatermarks, fonts, holograms"]
-    GEM2 --> CLU2["🧠 Claude\nSenior officer reviews\nfirst officer's report"]
-    CLU2 --> OUT2(["✅ APPROVED\nor ❌ FLAGGED"])
-
-    style ML2 fill:#f57f17,color:#fff
-    style GEM2 fill:#1565c0,color:#fff
-    style CLU2 fill:#2e7d32,color:#fff
-```
-
-> ML Kit just **reads the number**. Gemini and Claude **judge if it's real**.
-
----
-
-## 📱 Real-World Use Cases
-
-### Use Case 1: Scan with Barcode (Highest Confidence)
-Point the camera at a product barcode — ML Kit detects it automatically, and the green badge appears before you even tap Capture.
+Point the camera at a product barcode. ML Kit detects it in real-time (green badge appears before tapping Capture).
 
 ```
 Product:  Tylenol Children's Oral Suspension
-Barcode:  ✓ 300450122377 (auto-detected)
-Score:    95 / 100  ✅ AUTHENTIC
+Barcode:  300450122377 (auto-detected)
+Score:    95 / 100  AUTHENTIC
 
-Gemini: "UPC barcode resolves to Children's Tylenol Oral Suspension, Berry Flavor.
-Print quality is clear and professional with no spelling errors."
-Claude: Cross-verified and confirmed authentic.
+Gemini:   UPC barcode resolves to Children's Tylenol Oral Suspension, Berry Flavor.
+          Print quality is clear and professional with no spelling errors.
+Claude:   Cross-verified and confirmed authentic.
 ```
 
 ---
 
-### Use Case 2: Scan WITHOUT Barcode (Image-Only — Still Accurate)
-Point the camera at the side panel, back label, or any part of the packaging — even without a barcode, the AI reads the text and analyzes the packaging visually.
+### Without Barcode — Image Only
+
+Point at the side panel or back label. Gemini reads packaging text and analyzes it visually.
 
 ```
 Product:  Children's Liquid Acetaminophen
-Barcode:  ⚫ No barcode detected — image-only scan
-Score:    95 / 100  ✅ AUTHENTIC
+Barcode:  No barcode detected — image-only scan
+Score:    95 / 100  AUTHENTIC
 
 Gemini analyzed:
-  ✓ Warnings section layout matches genuine Tylenol formatting
-  ✓ Acetaminophen dosage instructions are medically accurate
-  ✓ Overdose warning text matches official McNeil labeling
-  ✓ Directions section fonts and spacing are professional quality
-  ✓ Customer service number format is legitimate
+  Warnings section layout matches genuine Tylenol formatting
+  Acetaminophen dosage instructions are medically accurate
+  Overdose warning text matches official McNeil labeling
+  Font and spacing are professional quality
 ```
-
-> **Why image-only works:** Gemini 2.5 Flash reads the actual text on the packaging — ingredient lists, warning formats, dosage instructions, phone numbers — and cross-checks them against known authentic product patterns. Just like a pharmacist or customs inspector who can spot a fake by reading the label, not just scanning the barcode.
 
 ---
 
-### Use Case 3: Detecting a Fake Product
-When packaging shows inconsistencies — blurry logos, wrong fonts, missing security features — the AI flags them as red flags.
+### Offline — No Internet
 
 ```
-Product:  [Counterfeit Luxury Watch]
-Barcode:  ✓ 123456789
-Score:    12 / 100  ❌ LIKELY FAKE
-
-Red Flags:
-  ⚠ Logo font does not match official brand typography
-  ⚠ Serial number format inconsistent with authentic models
-  ⚠ Hologram sticker appears pixelated / low resolution
-  ⚠ "Swiss Made" text placement is incorrect
+No internet connection detected.
+Connect to the internet for full AI analysis.
 ```
+
+The app saves the record locally and shows a friendly message — no crash, no spinner.
 
 ---
 
@@ -738,98 +500,45 @@ Red Flags:
 
 | | With Barcode | Without Barcode |
 |---|---|---|
-| **Badge color** | 🟢 Green | ⚫ Grey |
-| **Confidence** | Higher | Good |
+| **Badge** | Green | Grey |
 | **Product ID** | Barcode + image | Image only |
-| **Works for** | Packaged goods | Any label/packaging |
-| **AI analyzes** | Image + barcode data | Image + text on pack |
+| **Works for** | Packaged goods | Any label / packaging |
 
 ---
 
-## 🧪 How to Test With Fake/Counterfeit Barcodes
+## Roadmap
 
-### Method 1: Print Known Fake Barcodes
-Generate barcodes for products that don't match — e.g., a Rolex barcode on a $5 watch image.
-```
-Sites: barcode.tec-it.com, barcodesinc.com
-Barcode: EAN-13 format, e.g., 0000000000000 (invalid)
-```
-
-### Method 2: Use QR Code with Mismatched Text
-1. Generate a QR code at `qr-code-generator.com` with text: `FAKE_PRODUCT_TEST`
-2. Point the app at it — AI will analyze the surrounding packaging context
-
-### Method 3: Point at Clearly Counterfeit Images
-Print or display these on screen:
-- A photo of a fake Louis Vuitton bag (obvious logo inconsistencies)
-- A Rolex watch from AliExpress listing
-- A medicine bottle with blurry/pixelated label text
-
-**Expected behavior:**
-- Score < 50 → `SUSPICIOUS` or `LIKELY_FAKE`
-- Red flags: "Blurry logo", "Font inconsistency", "Barcode mismatch"
-
-### Method 4: Unit Test Fake Scenarios
-```kotlin
-// In your test:
-whenever(mockRepository.scanProduct(any(), eq("FAKE_BARCODE"), any()))
-    .thenReturn(Result.success(fakeResult))  // Score: 10, verdict: LIKELY_FAKE
-```
-
----
-
-## 🗺️ Roadmap
-
-- [x] Offline mode with on-device ML (TFLite MobileNetV3 pre-scan)
+- [ ] On-device ML model (TFLite) — pre-scan filter to skip cloud APIs for high-confidence cases
 - [ ] Product database for known counterfeits
-- [ ] Share scan result as image/PDF
+- [ ] Share scan result as image / PDF
 - [ ] Batch scanning mode
-- [ ] Support for additional product categories
 - [ ] Multi-language support
+- [ ] Additional product categories
 
 ---
 
-## 🤝 Part of AI Android Portfolio
+## Portfolio
 
 This is **Project 2** in a series of AI-powered Android apps:
 
 | # | Project | Status | Description |
 |---|---------|--------|-------------|
-| 1 | [MySampleApplication-AI](https://github.com/lakshmanreddymv-bot/MySampleApplication-AI) | ✅ Complete | AI assistant foundation |
-| 2 | **FakeProductDetector** | ✅ Complete | Dual-AI product authentication |
-| 3 | Coming Soon | 🔨 Building | ... |
+| 1 | [MySampleApplication-AI](https://github.com/lakshmanreddymv-bot/MySampleApplication-AI) | Complete | AI assistant foundation |
+| 2 | **FakeProductDetector** | Complete | Dual-AI product authentication |
+| 3 | Coming Soon | Building | — |
 
 ---
 
-## 📄 License
+## License
 
 ```
-MIT License
-
-Copyright (c) 2026 Lakshmana Reddy
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+MIT License — Copyright (c) 2026 Lakshmana Reddy
 ```
 
 ---
 
-## 👨‍💻 Author
+## Author
 
-**Lakshmana Reddy**  
-Android Tech Lead | 12 years experience  
-📍 Pleasanton, CA  
-🔗 [GitHub](https://github.com/lakshmanreddymv-bot)
-
----
-
-*Built with ❤️ and AI — pushing the boundaries of what Android apps can do*
+**Lakshmana Reddy**
+Android Tech Lead · 12 years experience · Pleasanton, CA
+[GitHub](https://github.com/lakshmanreddymv-bot)
