@@ -1,0 +1,7 @@
+# Ignore all images — only keep the folder skeleton
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.bmp
+*.gif
