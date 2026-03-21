@@ -18,11 +18,12 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 
 ---
 
-## 📸 <img width="1080" height="2400" alt="Screenshot_20260320_214050" src="https://github.com/user-attachments/assets/9bb1f3cd-080a-4ed1-90cb-6e53d24d2b1c" />
-Screenshots<img width="1080" height="2400" alt="Screenshot_20260320_213038" src="https://github.com/user-attachments/assets/76fd8185-d10d-41a1-89e4-94e64dd597d1" />
+## 📸 Screenshots
 
-
-> Screenshots will be added here once available. Take them on your device and drop them in the `/screenshots` folder.
+| Scan Result (Barcode) | Scan Result (No Barcode) |
+|:---:|:---:|
+| <img width="300" src="https://github.com/user-attachments/assets/9bb1f3cd-080a-4ed1-90cb-6e53d24d2b1c" alt="Authentic scan with barcode" /> | <img width="300" src="https://github.com/user-attachments/assets/76fd8185-d10d-41a1-89e4-94e64dd597d1" alt="Authentic scan without barcode" /> |
+| Tylenol · Barcode detected · **95/100 ✅** | Children's Acetaminophen · Image-only · **95/100 ✅** |
 
 ---
 
@@ -32,46 +33,31 @@ Screenshots<img width="1080" height="2400" alt="Screenshot_20260320_213038" src=
 
 ```mermaid
 graph TB
-    subgraph UI["🖥️  UI Layer  (Jetpack Compose)"]
-        SC[ScanScreen]
-        SVM[ScanViewModel]
+    subgraph UI["UI Layer — Jetpack Compose"]
+        SC[ScanScreen] --> SVM[ScanViewModel]
+        SVM --> SS[ScanUiState]
         RS[ResultScreen]
-        HS[HistoryScreen]
-        HVM[HistoryViewModel]
-        SS[ScanUiState<br/>Idle│Loading│Success│Error│RateLimited]
+        HS[HistoryScreen] --> HVM[HistoryViewModel]
     end
 
-    subgraph DOMAIN["🧩  Domain Layer  (Pure Kotlin - No Android)"]
+    subgraph DOMAIN["Domain Layer — Pure Kotlin"]
         SUC[ScanProductUseCase]
         GHC[GetScanHistoryUseCase]
-        PR[ProductRepository<br/>«interface»]
-        subgraph MODELS["Models"]
-            P[Product]
-            SR[ScanResult]
-            V[Verdict<br/>AUTHENTIC│SUSPICIOUS│LIKELY_FAKE]
-            C[Category<br/>MEDICINE│ELECTRONICS│LUXURY│FOOD│OTHER]
-        end
+        PR[ProductRepository interface]
+        MOD[Product / ScanResult / Verdict / Category]
     end
 
-    subgraph DATA["💾  Data Layer"]
+    subgraph DATA["Data Layer"]
         PRI[ProductRepositoryImpl]
-        subgraph API["Remote APIs"]
-            GVI[GeminiVisionApiImpl<br/>gemini-2.5-flash]
-            CAI[ClaudeVerificationApiImpl<br/>claude-haiku-4-5]
-        end
-        subgraph LOCAL["Local Storage  (Room)"]
-            SD[ScanDao]
-            SDB[ScanDatabase]
-            SE[ScanEntity]
-        end
+        GVI[GeminiVisionApiImpl]
+        CAI[ClaudeVerificationApiImpl]
+        DB[Room Database]
     end
 
-    subgraph DI["⚙️  DI Layer  (Hilt)"]
-        AM[AppModule<br/>Retrofit x2 │ Room │ OkHttp]
+    subgraph DI["DI — Hilt"]
+        AM[AppModule]
     end
 
-    SC -->|events| SVM
-    SVM -->|UiState| SC
     SVM --> SUC
     HVM --> GHC
     SUC --> PR
@@ -79,20 +65,13 @@ graph TB
     PR -.->|implements| PRI
     PRI --> GVI
     PRI --> CAI
-    PRI --> SD
-    SD --> SDB
-    SDB --> SE
-    AM -.->|provides| GVI
-    AM -.->|provides| CAI
-    AM -.->|provides| SDB
+    PRI --> DB
+    AM -.->|provides| PRI
 
     style UI fill:#1a237e,color:#fff
     style DOMAIN fill:#1b5e20,color:#fff
     style DATA fill:#b71c1c,color:#fff
     style DI fill:#4a148c,color:#fff
-    style MODELS fill:#2e7d32,color:#fff
-    style API fill:#c62828,color:#fff
-    style LOCAL fill:#c62828,color:#fff
 ```
 
 ---
@@ -103,37 +82,26 @@ graph TB
 sequenceDiagram
     actor User
     participant SC as ScanScreen
-    participant SVM as ScanViewModel
-    participant UC as ScanProductUseCase
-    participant REPO as ProductRepositoryImpl
-    participant GEMINI as Gemini 2.5 Flash<br/>(Vision AI)
-    participant CLAUDE as Claude Haiku<br/>(Verification AI)
-    participant DB as Room Database
+    participant VM as ScanViewModel
+    participant REPO as Repository
+    participant GEM as Gemini Vision
+    participant CLU as Claude Haiku
+    participant DB as Room DB
 
-    User->>SC: Point camera at product
-    SC->>SC: ML Kit detects barcode
-    User->>SC: Tap "Capture"
-    SC->>SVM: scanProduct(imageUri, barcode)
-    SVM->>SVM: isScanning = true<br/>emit Loading state
-    SVM->>UC: invoke(imageUri, barcode, category)
-    UC->>REPO: scanProduct(...)
+    User->>SC: Tap Capture
+    SC->>VM: scanProduct(uri, barcode)
+    VM->>VM: emit Loading
+    VM->>REPO: scanProduct(...)
+    REPO->>GEM: POST image + prompt
+    GEM-->>REPO: score, verdict, redFlags
+    REPO->>CLU: POST Gemini analysis
+    CLU-->>REPO: refined verdict
+    REPO->>DB: save ScanEntity
+    REPO-->>VM: ScanResult
+    VM->>VM: emit Success
+    VM-->>SC: navigate to ResultScreen
 
-    Note over REPO,GEMINI: Layer 1: Vision Analysis
-    REPO->>GEMINI: POST /v1beta/models/gemini-2.5-flash<br/>base64(compressed image) + prompt
-    GEMINI-->>REPO: {score, verdict, redFlags, explanation}
-
-    Note over REPO,CLAUDE: Layer 2: Cross-Verification
-    REPO->>CLAUDE: POST /v1/messages<br/>Gemini analysis + cross-verify prompt
-    CLAUDE-->>REPO: {refined score, final verdict, explanation}
-
-    REPO->>DB: INSERT ScanEntity
-    REPO-->>UC: ScanResult
-    UC-->>SVM: Result.success(scanResult)
-    SVM->>SVM: isScanning = false<br/>emit Success(scanResult)
-    SVM-->>SC: UiState.Success
-    SC-->>User: Show ResultScreen<br/>(Score + Verdict + Explanation)
-
-    Note over REPO,CLAUDE: Fallback: If Claude fails,<br/>Gemini result is used directly
+    Note over REPO,CLU: If Claude fails → Gemini result used directly
 ```
 
 ---
@@ -194,40 +162,17 @@ FakeProductDetector/
 
 ```mermaid
 graph LR
-    subgraph USER["👤 User Interaction"]
-        TAP[Tap Capture Button]
-    end
+    TAP([User Taps Capture]) --> EV[ViewModel handles event]
+    EV --> IS{isScanning?}
+    IS -->|true| IGN[Ignore — prevent duplicates]
+    IS -->|false| UC[ScanProductUseCase]
+    UC --> REPO[ProductRepository]
+    REPO -->|Result| ST[StateFlow emit]
+    ST --> UI[ScanScreen recomposes]
 
-    subgraph VM["ScanViewModel"]
-        EV[Event Handler]
-        ST[UiState<br/>StateFlow]
-        IS[isScanning Guard]
-    end
-
-    subgraph LOGIC["Business Logic"]
-        UC2[ScanProductUseCase]
-        REPO2[ProductRepository]
-    end
-
-    subgraph UI2["ScanScreen  (Compose)"]
-        OB[collect UiState]
-        RENDER[Render UI]
-    end
-
-    TAP -->|scanProduct event| EV
-    EV --> IS
-    IS -->|false → proceed| UC2
-    IS -->|true → ignore| IS
-    UC2 --> REPO2
-    REPO2 -->|Result| UC2
-    UC2 -->|emit| ST
-    ST -->|StateFlow| OB
-    OB --> RENDER
-
-    style USER fill:#e65100,color:#fff
-    style VM fill:#1565c0,color:#fff
-    style LOGIC fill:#2e7d32,color:#fff
-    style UI2 fill:#4a148c,color:#fff
+    style TAP fill:#e65100,color:#fff
+    style UC fill:#2e7d32,color:#fff
+    style UI fill:#1565c0,color:#fff
 ```
 
 **Pattern:** Clean Architecture + MVVM + Unidirectional Data Flow
@@ -481,37 +426,26 @@ OkHttpClient.Builder()
 ### How They Work Together
 
 ```mermaid
-flowchart TD
-    A([📸 Camera Image]) --> B
+flowchart LR
+    IMG([📸 Camera Image]) --> GEM
 
-    subgraph GEMINI["👁️ Gemini 2.5 Flash  —  The SCANNER"]
-        B[Receives the image]
-        B --> C[Reads packaging visually]
-        C --> C1[Product name & logo]
-        C --> C2[Label text & ingredients]
-        C --> C3[Print quality & fonts]
-        C --> C4[Barcode if present]
-        C1 & C2 & C3 & C4 --> D[Returns first assessment]
+    subgraph GEM["👁️ Gemini — SCANNER"]
+        G1[Reads image visually\nlogos · text · fonts · barcode]
+        G1 --> G2[Returns score + verdict + redFlags]
     end
 
-    D --> E
-
-    subgraph CLAUDE["🧠 Claude Haiku  —  The VERIFIER"]
-        E[Receives Gemini's TEXT analysis\nNO image — text only]
-        E --> F[Cross-checks the reasoning]
-        F --> F1[Does the score make sense?]
-        F --> F2[Are red flags valid?]
-        F --> F3[Any missed concerns?]
-        F --> F4[Is explanation complete?]
-        F1 & F2 & F3 & F4 --> G[Returns refined verdict]
+    subgraph CLU["🧠 Claude — VERIFIER"]
+        C1[Receives text analysis\nno image]
+        C1 --> C2[Cross-checks reasoning\nRefines verdict]
     end
 
-    G --> H([✅ Final Result shown to user])
+    GEM --> CLU
+    CLU --> OUT([✅ Final Result])
 
-    style GEMINI fill:#1565c0,color:#fff
-    style CLAUDE fill:#2e7d32,color:#fff
-    style A fill:#e65100,color:#fff
-    style H fill:#e65100,color:#fff
+    style GEM fill:#1565c0,color:#fff
+    style CLU fill:#2e7d32,color:#fff
+    style IMG fill:#e65100,color:#fff
+    style OUT fill:#e65100,color:#fff
 ```
 
 ---
