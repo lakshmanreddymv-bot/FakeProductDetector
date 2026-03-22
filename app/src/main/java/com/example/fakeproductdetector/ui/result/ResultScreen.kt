@@ -56,6 +56,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// S: Single Responsibility — renders only the scan result detail UI; all logic delegated to ResultViewModel
+/**
+ * Full-screen composable that displays the complete authenticity analysis for a single [ScanResult].
+ *
+ * Shows the product image, name, verdict badge, [AuthenticityScoreCard], red flags, and analysis
+ * explanation. Provides share and mute/unmute actions in the top bar. Automatically speaks
+ * the result via TTS on first composition.
+ *
+ * @param scanResult The completed [ScanResult] to display.
+ * @param onBack Callback invoked when the user navigates back to the scan screen.
+ * @param viewModel The [ResultViewModel] instance providing TTS and mute state.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultScreen(
@@ -273,6 +285,12 @@ fun ResultScreen(
     }
 }
 
+/**
+ * Builds a plain-text share message summarising the scan result.
+ *
+ * @param result The [ScanResult] to summarise.
+ * @return A formatted multi-line string suitable for sharing via Android's share sheet.
+ */
 private fun buildShareText(result: ScanResult): String = buildString {
     appendLine("🔍 FakeProductDetector Result")
     appendLine("Product: ${result.product.name}")
@@ -284,5 +302,11 @@ private fun buildShareText(result: ScanResult): String = buildString {
     appendLine("Analysis: ${result.explanation}")
 }
 
+/**
+ * Formats a Unix timestamp as a human-readable date/time string.
+ *
+ * @param epochMs Unix timestamp in milliseconds.
+ * @return Formatted date string (e.g. "Mar 21, 2026 14:30") using the device locale.
+ */
 private fun formatDate(epochMs: Long): String =
     SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(epochMs))

@@ -81,6 +81,19 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.Executors
 
+// S: Single Responsibility — renders only the camera scan UI and delegates all logic to ScanViewModel
+/**
+ * Full-screen composable that provides the camera viewfinder, barcode detection overlay,
+ * category selector, and capture button for initiating a product authenticity scan.
+ *
+ * Observes [ScanViewModel.uiState] and navigates to the result screen on [ScanUiState.Success],
+ * shows a Snackbar on [ScanUiState.Error], and displays a rate-limit banner on [ScanUiState.RateLimited].
+ * All state changes are triggered via [ScanViewModel] public functions — the UI never mutates state directly.
+ *
+ * @param onNavigateToResult Callback invoked with the completed [ScanResult] when scanning succeeds.
+ * @param onNavigateToHistory Callback invoked when the user taps the history icon.
+ * @param viewModel The [ScanViewModel] instance; defaults to the Hilt-provided instance.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScanScreen(
@@ -506,6 +519,16 @@ fun ScanScreen(
     }
 }
 
+/**
+ * Banner displayed at the bottom of the scan screen when the Gemini API rate limit has been hit.
+ *
+ * Shows the rate-limit title, a live countdown, and a draining progress bar.
+ *
+ * @param secondsRemaining Seconds remaining until scanning is re-enabled.
+ * @param isQuotaExhausted `true` for daily quota exhaustion; switches the banner to purple.
+ * @param title Short headline describing the rate-limit type.
+ * @param subtitle Descriptive sub-label shown before the countdown number.
+ */
 @Composable
 private fun RateLimitBanner(
     secondsRemaining: Int,

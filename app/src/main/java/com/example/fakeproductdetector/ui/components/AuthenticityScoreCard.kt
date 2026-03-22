@@ -31,12 +31,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.fakeproductdetector.domain.model.Verdict
 
+// S: Single Responsibility — renders only the animated authenticity score arc card
+
+/**
+ * Maps an authenticity score to a semantic colour for the score arc and verdict label.
+ *
+ * @param score Authenticity score in the range 0–100.
+ * @return Green for scores ≥ 75, orange for scores ≥ 50, red for scores below 50.
+ */
 private fun scoreColor(score: Float): Color = when {
     score >= 75f -> Color(0xFF4CAF50)
     score >= 50f -> Color(0xFFFF9800)
     else         -> Color(0xFFF44336)
 }
 
+/**
+ * Composable card that displays the authenticity score as an animated arc gauge with
+ * a colour-coded score number and verdict label.
+ *
+ * The arc animates from 0 to [score] over 1200 ms when first composed or when [score] changes.
+ * Arc colour is determined by [scoreColor]: green (≥ 75), orange (≥ 50), red (< 50).
+ *
+ * @param score Authenticity score in the range 0–100; drives both the arc sweep and the displayed number.
+ * @param verdict The categorical verdict label displayed below the arc.
+ * @param modifier Optional [Modifier] applied to the outer [Card].
+ */
 @Composable
 fun AuthenticityScoreCard(
     score: Float,

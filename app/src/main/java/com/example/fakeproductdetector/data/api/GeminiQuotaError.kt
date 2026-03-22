@@ -1,8 +1,15 @@
 package com.example.fakeproductdetector.data.api
 
+// S: Single Responsibility — models the distinct Gemini free-tier quota error types
+// O: Open/Closed — new quota error variants can be added as new subclasses without modifying existing ones
 /**
- * Represents the three distinct Gemini free-tier quota violations
- * that appear in the 429 response body as `quotaId` strings.
+ * Sealed exception hierarchy representing the distinct Gemini free-tier quota violations.
+ *
+ * Each subtype maps to a specific `quotaId` found in the 429 response body, allowing
+ * [com.example.fakeproductdetector.ui.scan.ScanViewModel] to display targeted messages and
+ * appropriate countdown durations.
+ *
+ * @param message User-facing description of the quota violation.
  */
 sealed class GeminiQuotaError(message: String) : Exception(message) {
 
@@ -33,6 +40,9 @@ sealed class GeminiQuotaError(message: String) : Exception(message) {
         /**
          * Parses the raw Gemini error response body and returns the most
          * specific [GeminiQuotaError] subtype. Falls back to [Generic].
+         *
+         * @param body The raw error response body string from the Gemini API.
+         * @return The most specific [GeminiQuotaError] subtype that matches the body content.
          */
         fun fromErrorBody(body: String): GeminiQuotaError = when {
             body.contains("GenerateContentInputTokensPerModelPerMinute", ignoreCase = true) ->

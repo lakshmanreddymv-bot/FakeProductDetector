@@ -36,16 +36,33 @@ import javax.inject.Singleton
 private const val MAX_NETWORK_RETRIES = 1
 private const val NETWORK_RETRY_DELAY_MS = 3_000L
 
+/**
+ * Returns true if this exception represents an API rate-limit or quota error.
+ *
+ * Used by [withRetry] to skip retry logic for quota-related failures.
+ */
 internal fun Exception.isRateLimit() =
     message?.contains("429") == true ||
     message?.contains("Too Many Requests", ignoreCase = true) == true ||
     message?.contains("RESOURCE_EXHAUSTED", ignoreCase = true) == true ||
     message?.contains("quota", ignoreCase = true) == true
 
+/**
+ * Returns true if this exception specifically indicates a daily quota exhaustion.
+ */
 internal fun Exception.isQuotaExhausted() =
     message?.contains("RESOURCE_EXHAUSTED", ignoreCase = true) == true ||
     message?.contains("quota exceeded", ignoreCase = true) == true
 
+/**
+ * Executes [block] with at most [MAX_NETWORK_RETRIES] retry attempts on transient failures.
+ *
+ * Rate-limit errors are re-thrown immediately without retrying to avoid burning additional quota.
+ *
+ * @param block The suspending operation to execute with retry support.
+ * @return The result of [block] on a successful attempt.
+ * @throws Exception the original exception after exhausting all retry attempts.
+ */
 private suspend fun <T> withRetry(block: suspend () -> T): T {
     var attempt = 0
     while (true) {
@@ -60,6 +77,20 @@ private suspend fun <T> withRetry(block: suspend () -> T): T {
     }
 }
 
+// S: Single Responsibility — orchestrates the scan pipeline and local database persistence
+// D: Dependency Inversion — implements ProductRepository interface; ViewModel depends on the interface
+/**
+ * Concrete implementation of [ProductRepository] that coordinates the two-stage AI scan pipeline
+ * (Gemini Vision → Claude cross-verification) and persists results to the local Room database.
+ *
+ * Handles offline detection, rate-limit errors, and graceful fallback to Gemini-only results
+ * when Claude is unavailable.
+ *
+ * @property scanDao Room DAO for reading and writing scan history records.
+ * @property geminiApi Gemini Vision API wrapper for image-based product analysis.
+ * @property claudeApi Claude API wrapper for cross-verification of the Gemini analysis.
+ * @property context Application context used for network checks and image URI resolution.
+ */
 @Singleton
 class ProductRepositoryImpl @Inject constructor(
     private val scanDao: ScanDao,
@@ -70,6 +101,18 @@ class ProductRepositoryImpl @Inject constructor(
 
     companion object { private const val TAG = "ProductRepo" }
 
+    /**
+     * Runs the full authenticity scan pipeline for the product image at [imageUri].
+     *
+     * Emits a [ScanEvent.Progress] for each pipeline step, then emits [ScanEvent.Result]
+     * when complete. If the device is offline, returns a placeholder result immediately.
+     * If Claude fails, falls back to the Gemini-only result.
+     *
+     * @param imageUri URI of the captured product image (file:// or content://).
+     * @param barcode Optional barcode or QR value detected before capture.
+     * @param category Product category used to guide the AI prompts.
+     * @return A cold [Flow] of [ScanEvent]s.
+     */
     override fun scanProduct(
         imageUri: String,
         barcode: String?,
@@ -142,18 +185,39 @@ class ProductRepositoryImpl @Inject constructor(
         emit(ScanEvent.Result(scanResult))
     }
 
+    /**
+     * Returns a live [Flow] of all persisted scan results, ordered newest-first.
+     *
+     * @return A [Flow] of [ScanResult] lists that updates on every database change.
+     */
     override fun getScanHistory(): Flow<List<ScanResult>> =
         scanDao.getAllScans().map { entities -> entities.map { it.toDomain() } }
 
+    /**
+     * Returns a live [Flow] for the scan result identified by [id].
+     *
+     * @param id Unique identifier of the scan to observe.
+     * @return A [Flow] emitting the matching [ScanResult], or null if not found.
+     */
     override fun getScanById(id: String): Flow<ScanResult?> =
         scanDao.getScanById(id).map { it?.toDomain() }
 
+    /**
+     * Deletes the scan record identified by [id] and attempts to delete its associated local image.
+     *
+     * @param id Unique identifier of the scan to delete.
+     */
     override suspend fun deleteScan(id: String) {
         val entity = scanDao.getScanByIdOnce(id)
         scanDao.deleteScan(id)
         entity?.let { deleteLocalImage(it.product.imageUri) }
     }
 
+    /**
+     * Checks whether the device currently has an active internet connection.
+     *
+     * @return `true` if a network with internet capability is active, `false` otherwise.
+     */
     private fun isNetworkAvailable(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         return cm.activeNetwork?.let {
@@ -161,6 +225,14 @@ class ProductRepositoryImpl @Inject constructor(
         } ?: false
     }
 
+    /**
+     * Attempts to delete the local image file or content URI associated with a scan.
+     *
+     * This is a best-effort operation; any failure is silently ignored since the
+     * database record has already been removed.
+     *
+     * @param imageUri The URI string of the image to delete.
+     */
     private fun deleteLocalImage(imageUri: String) {
         try {
             val uri = Uri.parse(imageUri)
@@ -174,6 +246,11 @@ class ProductRepositoryImpl @Inject constructor(
     }
 }
 
+/**
+ * Maps a [ScanResult] domain model to its [ScanEntity] database representation.
+ *
+ * Stores [verdict] as its enum name string so it can be reconstructed via [Verdict.valueOf].
+ */
 private fun ScanResult.toEntity(): ScanEntity = ScanEntity(
     id = id,
     product = product,
@@ -184,6 +261,11 @@ private fun ScanResult.toEntity(): ScanEntity = ScanEntity(
     scannedAt = scannedAt
 )
 
+/**
+ * Maps a [ScanEntity] database record back to its [ScanResult] domain representation.
+ *
+ * Converts the stored verdict string back to the [Verdict] enum value.
+ */
 private fun ScanEntity.toDomain(): ScanResult = ScanResult(
     id = id,
     product = product,

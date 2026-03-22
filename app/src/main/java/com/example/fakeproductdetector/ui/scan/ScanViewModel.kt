@@ -16,20 +16,57 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Cooldown duration (seconds) for per-minute Gemini quota violations. */
 private const val RPM_COOLDOWN_SECONDS   = 60   // per-minute quota window
+
+/** Cooldown duration (seconds) shown for daily quota exhaustion (placeholder — actual reset is midnight). */
 private const val DAILY_COOLDOWN_SECONDS = 300  // 5 min placeholder for daily exhaustion
 
+// S: Single Responsibility — manages scan lifecycle state and rate-limit countdowns only
+// D: Dependency Inversion — depends on ScanProductUseCase (domain layer), not on repository or API directly
+/**
+ * Follows Unidirectional Data Flow (UDF) pattern:
+ * - Events flow UP from [ScanScreen] via public functions ([scanProduct], [reset])
+ * - State flows DOWN to [ScanScreen] via [uiState] StateFlow
+ * - No direct state mutation from the UI layer
+ */
+/**
+ * ViewModel for [ScanScreen] that drives the product authenticity scan pipeline.
+ *
+ * Manages the full scan lifecycle: initiating scans via [ScanProductUseCase], mapping
+ * pipeline events to [ScanUiState], handling [GeminiQuotaError] variants with appropriate
+ * countdowns, and exposing a single immutable [uiState] for the UI to observe.
+ *
+ * @property scanProductUseCase Use case that executes the Gemini + Claude scan pipeline.
+ */
 @HiltViewModel
 class ScanViewModel @Inject constructor(
     private val scanProductUseCase: ScanProductUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
+
+    /** Immutable state observed by [ScanScreen]. Never mutated directly from the UI. */
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
 
+    /** Guard flag preventing concurrent scan launches. */
     private var isScanning = false
+
+    /** Coroutine job that ticks the rate-limit countdown; cancelled on reset. */
     private var countdownJob: Job? = null
 
+    /**
+     * Initiates a product authenticity scan for the image at [imageUri].
+     *
+     * No-ops if a scan is already in progress or if the UI is currently rate-limited.
+     * Maps [ScanEvent.Progress] to [ScanUiState.Loading] and [ScanEvent.Result] to
+     * [ScanUiState.Success]. Maps [GeminiQuotaError] subtypes to [ScanUiState.RateLimited]
+     * with appropriate countdown durations; all other errors map to [ScanUiState.Error].
+     *
+     * @param imageUri URI of the captured product image (file:// or content://).
+     * @param barcode Optional barcode or QR value detected before capture; null if none.
+     * @param category Product category selected by the user to guide AI analysis.
+     */
     fun scanProduct(imageUri: String, barcode: String?, category: Category) {
         if (isScanning) return
         if (_uiState.value is ScanUiState.RateLimited) return
@@ -95,7 +132,17 @@ class ScanViewModel @Inject constructor(
         }
     }
 
-    /** Ticks down every second; auto-resets to [ScanUiState.Idle] when done. */
+    /**
+     * Starts a countdown that ticks [seconds] down to zero, emitting a [ScanUiState.RateLimited]
+     * state on each tick. Automatically resets to [ScanUiState.Idle] when the countdown finishes.
+     *
+     * Any previously running countdown is cancelled before the new one starts.
+     *
+     * @param seconds Total number of seconds to count down.
+     * @param isQuotaExhausted `true` for daily quota exhaustion; affects banner colour and messaging.
+     * @param title Short headline for the rate-limit banner.
+     * @param subtitle Descriptive sub-label shown before the countdown timer.
+     */
     private fun startCountdown(
         seconds: Int,
         isQuotaExhausted: Boolean,
@@ -117,12 +164,21 @@ class ScanViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Cancels any active countdown or scan and returns the UI to [ScanUiState.Idle].
+     *
+     * Called by [ScanScreen] after a [ScanUiState.Success] or [ScanUiState.Error] state
+     * has been handled (e.g. after navigation or Snackbar display).
+     */
     fun reset() {
         countdownJob?.cancel()
         isScanning = false
         _uiState.value = ScanUiState.Idle
     }
 
+    /**
+     * Cancels the countdown job when the ViewModel is cleared to prevent coroutine leaks.
+     */
     override fun onCleared() {
         super.onCleared()
         countdownJob?.cancel()

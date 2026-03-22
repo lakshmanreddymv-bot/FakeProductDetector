@@ -10,11 +10,34 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// S: Single Responsibility — responsible only for Claude API communication and cross-verification response parsing
+// D: Dependency Inversion — depends on ClaudeVerificationApi interface, not on a concrete HTTP client
+/**
+ * Wraps the [ClaudeVerificationApi] Retrofit interface with prompt construction and response parsing.
+ *
+ * Takes the initial [GeminiAnalysis] produced by [GeminiVisionApiImpl], builds a structured
+ * cross-verification prompt, calls the Claude API, and parses the JSON response into a
+ * final [ScanResult].
+ *
+ * @property api Retrofit-generated [ClaudeVerificationApi] implementation.
+ * @property gson Gson instance used to parse the JSON response from Claude.
+ */
 @Singleton
 class ClaudeVerificationApiImpl @Inject constructor(
     private val api: ClaudeVerificationApi,
     private val gson: Gson
 ) {
+    /**
+     * Cross-verifies the Gemini analysis using Claude and returns a refined [ScanResult].
+     *
+     * Constructs a prompt that presents Gemini's initial findings to Claude, then parses
+     * Claude's JSON response into a final [ScanResult] associated with the given [product].
+     *
+     * @param geminiAnalysis The initial authenticity assessment produced by Gemini.
+     * @param product The product being evaluated (carries identity and metadata).
+     * @return A refined [ScanResult] combining insights from both Gemini and Claude.
+     * @throws Exception when Claude returns an empty or unparseable response.
+     */
     suspend fun verify(geminiAnalysis: GeminiAnalysis, product: Product): ScanResult {
         val redFlagsSummary = if (geminiAnalysis.redFlags.isEmpty()) {
             "None identified"
@@ -60,6 +83,16 @@ class ClaudeVerificationApiImpl @Inject constructor(
         return parseResponse(responseText, product)
     }
 
+    /**
+     * Parses the raw text response from Claude into a [ScanResult].
+     *
+     * Extracts a JSON object from the response text (handling optional markdown code fences),
+     * then maps each field to the corresponding [ScanResult] property.
+     *
+     * @param text Raw text response from the Claude API.
+     * @param product The product to associate with the resulting [ScanResult].
+     * @return Parsed [ScanResult]; uses safe defaults for any missing or malformed fields.
+     */
     private fun parseResponse(text: String, product: Product): ScanResult {
         val json = extractJson(text)
         val obj = gson.fromJson(json, JsonObject::class.java)
@@ -86,6 +119,14 @@ class ClaudeVerificationApiImpl @Inject constructor(
     }
 }
 
+/**
+ * Extracts a JSON object string from [text], stripping optional markdown code fences.
+ *
+ * Tries to find a ```json ... ``` block first, then falls back to the first bare `{ ... }` match.
+ *
+ * @param text Raw text that may contain a JSON object, possibly wrapped in markdown fences.
+ * @return The extracted JSON string, or [text] trimmed if no JSON structure is found.
+ */
 private fun extractJson(text: String): String {
     val codeBlock = Regex("```(?:json)?\\s*([\\s\\S]*?)```").find(text)
     if (codeBlock != null) return codeBlock.groupValues[1].trim()

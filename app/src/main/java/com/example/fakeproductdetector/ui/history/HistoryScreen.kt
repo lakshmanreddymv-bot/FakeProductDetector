@@ -55,6 +55,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// S: Single Responsibility — renders only the scan history list UI; all logic delegated to HistoryViewModel
+/**
+ * Full-screen composable that displays the list of past product scans.
+ *
+ * Shows an empty-state message when there are no scans, or a lazy list of [SwipeableHistoryItem]s
+ * otherwise. Each item can be tapped to view the result or swiped left to delete with a confirmation
+ * dialog.
+ *
+ * @param onBack Callback invoked when the user taps the back arrow.
+ * @param onItemClick Callback invoked with the scan ID when the user taps a history item.
+ * @param viewModel The [HistoryViewModel] instance; defaults to the Hilt-provided instance.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
@@ -112,6 +124,15 @@ fun HistoryScreen(
     }
 }
 
+/**
+ * Wraps a [HistoryItem] in a [SwipeToDismissBox] that reveals a red delete background on
+ * left-swipe and shows a confirmation [AlertDialog] before delegating to [onDelete].
+ *
+ * @param result The [ScanResult] represented by this list item.
+ * @param onDelete Callback invoked when the user confirms deletion.
+ * @param onClick Callback invoked when the user taps the item (without swiping).
+ * @param modifier Optional [Modifier] applied to the outer dismiss box.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeableHistoryItem(
@@ -191,6 +212,13 @@ private fun SwipeableHistoryItem(
     }
 }
 
+/**
+ * Card composable showing a thumbnail, product name, category, scan date, score, and verdict chip
+ * for a single scan history entry.
+ *
+ * @param result The [ScanResult] to display.
+ * @param onClick Callback invoked when the card is tapped.
+ */
 @Composable
 private fun HistoryItem(
     result: ScanResult,
@@ -269,5 +297,11 @@ private fun HistoryItem(
     }
 }
 
+/**
+ * Formats a Unix timestamp as a compact date/time string for history list items.
+ *
+ * @param epochMs Unix timestamp in milliseconds.
+ * @return Formatted date string (e.g. "Mar 21, 14:30") using the device locale.
+ */
 private fun formatDate(epochMs: Long): String =
     SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(epochMs))
