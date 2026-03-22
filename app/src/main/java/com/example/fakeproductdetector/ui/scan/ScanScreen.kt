@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -49,6 +50,7 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -96,6 +98,8 @@ fun ScanScreen(
     var categoryExpanded by remember { mutableStateOf(false) }
     var detectedBarcode by remember { mutableStateOf<String?>(null) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var showScanWarning by remember { mutableStateOf(false) }
+    var proceedWithScan by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // ── Runtime camera permission ──────────────────────────────────────────
     var hasCameraPermission by remember {
@@ -138,6 +142,43 @@ fun ScanScreen(
             else -> {}
         }
     }
+
+    // ── Scan validation warning dialog ────────────────────────────────────
+    if (showScanWarning) {
+        AlertDialog(
+            onDismissRequest = { showScanWarning = false; proceedWithScan = null },
+            title = { Text("Scan May Not Be Accurate") },
+            text = {
+                Text(
+                    "For best results, point the camera at a product with:\n" +
+                    "  \u2022 Visible packaging or labels\n" +
+                    "  \u2022 Brand logos or text\n" +
+                    "  \u2022 A barcode or QR code\n\n" +
+                    "Scanning plain objects like fabric, food without labels, or " +
+                    "natural items may give inaccurate results.\n\n" +
+                    "Do you want to continue anyway?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showScanWarning = false
+                    proceedWithScan?.invoke()
+                    proceedWithScan = null
+                }) {
+                    Text("Scan Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showScanWarning = false
+                    proceedWithScan = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { innerPadding ->
 
@@ -307,6 +348,7 @@ fun ScanScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Category selector
+                Column {
                 ExposedDropdownMenuBox(
                     expanded = categoryExpanded,
                     onExpandedChange = { categoryExpanded = it }
@@ -316,7 +358,7 @@ fun ScanScreen(
                             .replaceFirstChar { it.uppercase() },
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Category", color = Color.White) },
+                        label = { Text("Product Category (optional)", color = Color.White) },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded)
                         },
@@ -352,6 +394,13 @@ fun ScanScreen(
                         }
                     }
                 }
+                Text(
+                    text = "Select a category for more accurate results",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+                } // end Column
 
                 // Capture button
                 val isRateLimited = uiState is ScanUiState.RateLimited
@@ -369,26 +418,36 @@ fun ScanScreen(
                         onClick = {
                             if (isRateLimited || isLoading) return@IconButton
                             val capture = imageCapture ?: return@IconButton
-                            val outputFile = File(
-                                context.cacheDir,
-                                "scan_${System.currentTimeMillis()}.jpg"
-                            )
-                            val outputOptions = ImageCapture.OutputFileOptions.Builder(outputFile).build()
-                            capture.takePicture(
-                                outputOptions,
-                                ContextCompat.getMainExecutor(context),
-                                object : ImageCapture.OnImageSavedCallback {
-                                    override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                        val uri = Uri.fromFile(outputFile).toString()
-                                        viewModel.scanProduct(uri, detectedBarcode, selectedCategory)
-                                    }
-                                    override fun onError(exc: ImageCaptureException) {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("Capture failed: ${exc.message}")
+
+                            val doScan = {
+                                val outputFile = File(
+                                    context.cacheDir,
+                                    "scan_${System.currentTimeMillis()}.jpg"
+                                )
+                                val outputOptions = ImageCapture.OutputFileOptions.Builder(outputFile).build()
+                                capture.takePicture(
+                                    outputOptions,
+                                    ContextCompat.getMainExecutor(context),
+                                    object : ImageCapture.OnImageSavedCallback {
+                                        override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                            val uri = Uri.fromFile(outputFile).toString()
+                                            viewModel.scanProduct(uri, detectedBarcode, selectedCategory)
+                                        }
+                                        override fun onError(exc: ImageCaptureException) {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("Capture failed: ${exc.message}")
+                                            }
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
+
+                            if (detectedBarcode == null && selectedCategory == Category.OTHER) {
+                                proceedWithScan = doScan
+                                showScanWarning = true
+                            } else {
+                                doScan()
+                            }
                         },
                         modifier = Modifier.size(64.dp)
                     ) {
