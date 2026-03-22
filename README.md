@@ -31,6 +31,7 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 - **TTS voice output** — result is read aloud after every scan
 - **Room scan history** — all scans persisted locally with timestamps
 - **Swipe-to-delete** — remove individual history entries with a swipe gesture
+- **Smart scan validation** — warns before scanning plain objects without packaging or barcode to prevent misleading results
 - **Offline detection** — friendly message shown when no internet is available
 - **Rate limit handling** — countdown banners for Gemini 429 / daily quota errors
 - **Clean Architecture + MVVM + Hilt + UDF**
@@ -42,23 +43,29 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 ```mermaid
 flowchart LR
     CAM([Camera]) --> ML[ML Kit\nBarcode]
-    ML --> GEM[Gemini 2.5 Flash\nVision Analysis]
+    ML --> VAL{Scan\nValidation}
+    VAL -->|plain object\nno barcode\ncategory=OTHER| WARN[Warning Dialog]
+    WARN -->|Scan Anyway| GEM
+    VAL -->|packaged product\nor category set| GEM[Gemini 2.5 Flash\nVision Analysis]
     GEM --> CLU[Claude Haiku\nCross-Verification]
     CLU --> RES([Result])
     RES --> TTS[TTS\nVoice Output]
 
-    style CAM fill:#e65100,color:#fff
-    style ML  fill:#f57f17,color:#fff
-    style GEM fill:#1565c0,color:#fff
-    style CLU fill:#2e7d32,color:#fff
-    style RES fill:#e65100,color:#fff
-    style TTS fill:#4a148c,color:#fff
+    style CAM  fill:#e65100,color:#fff
+    style ML   fill:#f57f17,color:#fff
+    style VAL  fill:#6a1b9a,color:#fff
+    style WARN fill:#ad1457,color:#fff
+    style GEM  fill:#1565c0,color:#fff
+    style CLU  fill:#2e7d32,color:#fff
+    style RES  fill:#e65100,color:#fff
+    style TTS  fill:#4a148c,color:#fff
 ```
 
 1. **ML Kit** reads any barcode in the live camera frame in real-time before you tap Capture.
-2. **Gemini 2.5 Flash** receives the captured JPEG and analyzes packaging visually — logos, text, fonts, print quality, barcode data.
-3. **Claude Haiku** receives Gemini's text analysis (no image) and cross-checks the reasoning for a refined final verdict.
-4. **TTS** reads the result aloud. If Claude fails, Gemini's result is used directly — the app never crashes.
+2. **Scan Validation** checks before proceeding — if no barcode is detected and category is OTHER, a warning dialog is shown to prevent meaningless scans.
+3. **Gemini 2.5 Flash** receives the captured JPEG and analyzes packaging visually — logos, text, fonts, print quality, barcode data.
+4. **Claude Haiku** receives Gemini's text analysis (no image) and cross-checks the reasoning for a refined final verdict.
+5. **TTS** reads the result aloud. If Claude fails, Gemini's result is used directly — the app never crashes.
 
 ---
 
@@ -506,9 +513,29 @@ The app saves the record locally and shows a friendly message — no crash, no s
 
 ---
 
+### Smart Scan Warning
+
+When you point the camera at a plain object with no barcode detected and category set to OTHER, the app warns you before scanning:
+
+> "For best results, point the camera at a product with visible packaging, labels, brand logos, or a barcode."
+
+This prevents misleading results — for example, a sofa pillow scoring 95/100 Authentic.
+
+| Scenario | Behaviour |
+|---|---|
+| Plain fabric, no barcode, category = OTHER | Warning dialog shown |
+| Medicine box with barcode | Scan proceeds immediately |
+| Electronics, no barcode, category = ELECTRONICS | Scan proceeds immediately |
+| Any product with category set | Scan proceeds immediately |
+
+Tap **"Scan Anyway"** to override and proceed. Tap **"Cancel"** to stay on the scan screen and reframe the shot.
+
+---
+
 ## Roadmap
 
 - [ ] On-device ML model (TFLite) — pre-scan filter to skip cloud APIs for high-confidence cases
+- [ ] Category auto-detection from image — remove need to select manually
 - [ ] Product database for known counterfeits
 - [ ] Share scan result as image / PDF
 - [ ] Batch scanning mode
