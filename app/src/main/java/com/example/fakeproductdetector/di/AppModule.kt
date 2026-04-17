@@ -73,7 +73,7 @@ object AppModule {
     fun provideLoggingInterceptor(): HttpLoggingInterceptor =
         HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
+                HttpLoggingInterceptor.Level.HEADERS
             } else {
                 HttpLoggingInterceptor.Level.NONE
             }
@@ -183,6 +183,7 @@ object AppModule {
     @Singleton
     fun provideScanDatabase(@ApplicationContext context: Context): ScanDatabase =
         Room.databaseBuilder(context, ScanDatabase::class.java, "scan_history.db")
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     /**

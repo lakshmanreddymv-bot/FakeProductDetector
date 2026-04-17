@@ -10,6 +10,8 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+
 // S: Single Responsibility — responsible only for Claude API communication and cross-verification response parsing
 // D: Dependency Inversion — depends on ClaudeVerificationApi interface, not on a concrete HTTP client
 /**
@@ -69,7 +71,7 @@ class ClaudeVerificationApiImpl @Inject constructor(
         """.trimIndent()
 
         val request = ClaudeRequest(
-            model = "claude-haiku-4-5",
+            model = CLAUDE_MODEL,
             maxTokens = 1024,
             messages = listOf(ClaudeRequest.Message(role = "user", content = prompt))
         )

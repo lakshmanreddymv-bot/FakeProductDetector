@@ -70,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.fakeproductdetector.domain.model.Category
@@ -291,7 +292,12 @@ fun ScanScreen(
                                 preview, capture, analysis
                             )
                         } catch (e: Exception) {
-                            e.printStackTrace()
+                            Log.e("ScanScreen", "Camera setup failed: ${e.message}", e)
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    "Camera setup failed. Please restart the app."
+                                )
+                            }
                         }
                     }, ContextCompat.getMainExecutor(ctx))
                     previewView

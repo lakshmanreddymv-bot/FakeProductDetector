@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import com.example.fakeproductdetector.domain.model.Category
 import com.example.fakeproductdetector.domain.model.Product
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -18,7 +19,7 @@ import com.google.gson.reflect.TypeToken
 @Database(
     entities = [ScanEntity::class],
     version = 1,
-    exportSchema = false
+    exportSchema = true
 )
 @TypeConverters(ScanDatabase.Converters::class)
 abstract class ScanDatabase : RoomDatabase() {
@@ -54,7 +55,18 @@ abstract class ScanDatabase : RoomDatabase() {
          * @return The deserialised [Product].
          */
         @TypeConverter
-        fun toProduct(json: String): Product = gson.fromJson(json, Product::class.java)
+        fun toProduct(json: String): Product = runCatching {
+            gson.fromJson(json, Product::class.java)
+        }.getOrElse {
+            Product(
+                id = "",
+                name = "Unknown",
+                barcode = null,
+                imageUri = "",
+                category = Category.OTHER,
+                scannedAt = 0L
+            )
+        }
 
         /**
          * Serialises a list of strings to a JSON array string for database storage.

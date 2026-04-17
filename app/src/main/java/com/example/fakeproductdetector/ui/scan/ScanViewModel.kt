@@ -73,62 +73,66 @@ class ScanViewModel @Inject constructor(
         isScanning = true
 
         viewModelScope.launch {
-            _uiState.value = ScanUiState.Loading("Scanning…")
-            scanProductUseCase(imageUri, barcode, category)
-                .catch { e ->
-                    isScanning = false
-                    when (e) {
-                        // ── Token limit per minute ─────────────────────────────────────
-                        is GeminiQuotaError.TokenLimitPerMinute -> startCountdown(
-                            seconds  = RPM_COOLDOWN_SECONDS,
-                            isQuotaExhausted = false,
-                            title    = "Token limit reached",
-                            subtitle = "Image data exceeded free-tier token quota. Ready in"
-                        )
-                        // ── Requests per minute ────────────────────────────────────────
-                        is GeminiQuotaError.RequestsPerMinute -> startCountdown(
-                            seconds  = RPM_COOLDOWN_SECONDS,
-                            isQuotaExhausted = false,
-                            title    = "Too many scans",
-                            subtitle = "Free tier allows 15 requests/min. Ready in"
-                        )
-                        // ── Daily quota fully exhausted ────────────────────────────────
-                        is GeminiQuotaError.DailyLimitExhausted -> startCountdown(
-                            seconds  = DAILY_COOLDOWN_SECONDS,
-                            isQuotaExhausted = true,
-                            title    = "Daily quota exhausted",
-                            subtitle = "Enable billing at aistudio.google.com — or retry in"
-                        )
-                        // ── Generic / unrecognised quota error ─────────────────────────
-                        is GeminiQuotaError -> startCountdown(
-                            seconds  = RPM_COOLDOWN_SECONDS,
-                            isQuotaExhausted = false,
-                            title    = "API rate limit reached",
-                            subtitle = "Ready to scan again in"
-                        )
-                        // ── Non-quota errors ───────────────────────────────────────────
-                        else -> {
-                            val msg = when {
-                                e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
-                                e.message?.contains("No address associated", ignoreCase = true) == true ||
-                                e.message?.contains("failed to connect", ignoreCase = true) == true ||
-                                e.message?.contains("network", ignoreCase = true) == true ->
-                                    "No internet connection. Please connect and try again."
-                                else -> e.message ?: "Unknown error occurred"
+            try {
+                _uiState.value = ScanUiState.Loading("Scanning…")
+                scanProductUseCase(imageUri, barcode, category)
+                    .catch { e ->
+                        isScanning = false
+                        when (e) {
+                            // ── Token limit per minute ─────────────────────────────────────
+                            is GeminiQuotaError.TokenLimitPerMinute -> startCountdown(
+                                seconds  = RPM_COOLDOWN_SECONDS,
+                                isQuotaExhausted = false,
+                                title    = "Token limit reached",
+                                subtitle = "Image data exceeded free-tier token quota. Ready in"
+                            )
+                            // ── Requests per minute ────────────────────────────────────────
+                            is GeminiQuotaError.RequestsPerMinute -> startCountdown(
+                                seconds  = RPM_COOLDOWN_SECONDS,
+                                isQuotaExhausted = false,
+                                title    = "Too many scans",
+                                subtitle = "Free tier allows 15 requests/min. Ready in"
+                            )
+                            // ── Daily quota fully exhausted ────────────────────────────────
+                            is GeminiQuotaError.DailyLimitExhausted -> startCountdown(
+                                seconds  = DAILY_COOLDOWN_SECONDS,
+                                isQuotaExhausted = true,
+                                title    = "Daily quota exhausted",
+                                subtitle = "Enable billing at aistudio.google.com — or retry in"
+                            )
+                            // ── Generic / unrecognised quota error ─────────────────────────
+                            is GeminiQuotaError -> startCountdown(
+                                seconds  = RPM_COOLDOWN_SECONDS,
+                                isQuotaExhausted = false,
+                                title    = "API rate limit reached",
+                                subtitle = "Ready to scan again in"
+                            )
+                            // ── Non-quota errors ───────────────────────────────────────────
+                            else -> {
+                                val msg = when {
+                                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
+                                    e.message?.contains("No address associated", ignoreCase = true) == true ||
+                                    e.message?.contains("failed to connect", ignoreCase = true) == true ||
+                                    e.message?.contains("network", ignoreCase = true) == true ->
+                                        "No internet connection. Please connect and try again."
+                                    else -> e.message ?: "Unknown error occurred"
+                                }
+                                _uiState.value = ScanUiState.Error(msg)
                             }
-                            _uiState.value = ScanUiState.Error(msg)
                         }
                     }
-                }
-                .collect { event ->
-                    when (event) {
-                        is ScanEvent.Progress -> _uiState.value = ScanUiState.Loading(event.message)
-                        is ScanEvent.Result   -> {
-                            isScanning = false
-                            _uiState.value = ScanUiState.Success(event.scanResult)
+                    .collect { event ->
+                        when (event) {
+                            is ScanEvent.Progress -> _uiState.value = ScanUiState.Loading(event.message)
+                            is ScanEvent.Result   -> {
+                                isScanning = false
+                                _uiState.value = ScanUiState.Success(event.scanResult)
+                            }
                         }
                     }
-                }
+            } finally {
+                isScanning = false
+            }
         }
     }
 

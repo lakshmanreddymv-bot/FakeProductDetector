@@ -69,6 +69,7 @@ private suspend fun <T> withRetry(block: suspend () -> T): T {
         try {
             return block()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             if (e.isRateLimit()) throw e
             attempt++
             if (attempt >= MAX_NETWORK_RETRIES) throw e
@@ -270,7 +271,7 @@ private fun ScanEntity.toDomain(): ScanResult = ScanResult(
     id = id,
     product = product,
     authenticityScore = authenticityScore,
-    verdict = Verdict.valueOf(verdict),
+    verdict = runCatching { Verdict.valueOf(verdict) }.getOrDefault(Verdict.SUSPICIOUS),
     redFlags = redFlags,
     explanation = explanation,
     scannedAt = scannedAt
