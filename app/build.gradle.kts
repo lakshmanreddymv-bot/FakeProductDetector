@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.kotlin.serialization)
+    id("jacoco")
 }
 
 val localProps = Properties().apply { load(rootProject.file("local.properties").inputStream()) }
@@ -29,6 +30,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -59,6 +63,48 @@ kotlin {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// ── JaCoCo ──────────────────────────────────────────────────────────────────
+
+jacoco { toolVersion = "0.8.12" }
+
+val jacocoExcludes = listOf(
+    "**/R.class", "**/R\$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+    "**/*Hilt*.*", "**/*_Factory*.*", "**/*_MembersInjector*.*",
+    "**/Dagger*Component*.*", "**/di/**",
+    "**/*Screen*.*", "**/*Activity*.*", "**/*Theme*.*",
+    "**/*Color*.*", "**/*Type*.*", "**/model/**", "**/*_Impl*.*"
+)
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    group = "verification"
+    description = "JaCoCo unit-test coverage report — debug build."
+    dependsOn("testDebugUnitTest")
+    reports { xml.required.set(true); html.required.set(true) }
+    val classesDir = layout.buildDirectory.dir("tmp/kotlin-classes/debug")
+    classDirectories.setFrom(fileTree(classesDir) { exclude(jacocoExcludes) })
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(fileTree(layout.buildDirectory) {
+        include("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec")
+    })
+}
+
+tasks.register<JacocoCoverageVerification>("jacocoCoverageVerification") {
+    group = "verification"
+    description = "Fail if line coverage < 80% (dual-AI safety target)."
+    dependsOn("jacocoTestReport")
+    violationRules {
+        rule {
+            limit { counter = "LINE"; value = "COVEREDRATIO"; minimum = "0.80".toBigDecimal() }
+        }
+    }
+    val classesDir = layout.buildDirectory.dir("tmp/kotlin-classes/debug")
+    classDirectories.setFrom(fileTree(classesDir) { exclude(jacocoExcludes) })
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(fileTree(layout.buildDirectory) {
+        include("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec")
+    })
 }
 
 dependencies {
