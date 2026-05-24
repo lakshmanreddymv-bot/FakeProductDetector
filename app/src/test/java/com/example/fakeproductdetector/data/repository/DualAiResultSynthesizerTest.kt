@@ -11,6 +11,7 @@ import com.example.fakeproductdetector.data.local.ScanDao
 import com.example.fakeproductdetector.domain.model.Category
 import com.example.fakeproductdetector.domain.model.ScanEvent
 import com.example.fakeproductdetector.domain.model.Verdict
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,7 +58,7 @@ class DualAiResultSynthesizerTest {
         geminiApi = mock()
         claudeApi = mock()
         context   = mock()
-        whenever(scanDao.insertScan(any())).thenReturn(Unit)
+        runBlocking { whenever(scanDao.insertScan(any())).thenReturn(Unit) }
         mockOnlineNetwork()
         repository = ProductRepositoryImpl(scanDao, geminiApi, claudeApi, context)
     }
@@ -227,7 +228,7 @@ class DualAiResultSynthesizerTest {
     private suspend fun collectResult(): com.example.fakeproductdetector.domain.model.ScanResult {
         var result: com.example.fakeproductdetector.domain.model.ScanResult? = null
         repository.scanProduct("file:///img.jpg", null, Category.ELECTRONICS).collect { event ->
-            if (event is ScanEvent.Result) result = event.result
+            if (event is ScanEvent.Result) result = event.scanResult
         }
         return checkNotNull(result) { "No ScanResult emitted" }
     }

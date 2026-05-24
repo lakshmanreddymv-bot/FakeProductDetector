@@ -40,7 +40,7 @@ class ClaudeVerificationApiImplTest {
         name        = "Test Sneaker",
         barcode     = "012345678901",
         imageUri    = "file:///test.jpg",
-        category    = Category.FASHION,
+        category    = Category.LUXURY,
         scannedAt   = System.currentTimeMillis()
     )
 
@@ -229,7 +229,7 @@ class ClaudeVerificationApiImplTest {
     fun `empty response text throws exception for upstream fallback`() = runTest {
         // An empty or null content means Claude returned nothing — caller should
         // catch this and fall back to Gemini-only result (verified in ProductRepositoryImplTest)
-        val emptyResponse = ClaudeResponse(content = null, id = "resp-empty", model = "claude-haiku-4-5-20251001")
+        val emptyResponse = ClaudeResponse(content = null, id = "resp-empty", model = "claude-haiku-4-5-20251001", type = null, role = null)
         whenever(api.verify(any())).thenReturn(emptyResponse)
 
         try {
@@ -282,6 +282,8 @@ class ClaudeVerificationApiImplTest {
     private fun buildClaudeResponse(textContent: String): ClaudeResponse =
         ClaudeResponse(
             id      = "msg_test_${UUID.randomUUID()}",
+            type    = null,
+            role    = null,
             model   = "claude-haiku-4-5-20251001",
             content = listOf(ClaudeResponse.ContentBlock(type = "text", text = textContent))
         )

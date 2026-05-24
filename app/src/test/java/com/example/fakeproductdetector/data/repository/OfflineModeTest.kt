@@ -86,7 +86,7 @@ class OfflineModeTest {
     fun `offline result explanation tells user to connect internet`() = runTest {
         whenever(scanDao.insertScan(any())).thenReturn(Unit)
 
-        val result = collectResult(Category.FASHION)
+        val result = collectResult(Category.LUXURY)
 
         assertTrue(
             "Offline explanation should mention internet connection",
@@ -100,7 +100,7 @@ class OfflineModeTest {
     fun `offline result is never null`() = runTest {
         whenever(scanDao.insertScan(any())).thenReturn(Unit)
 
-        val result = collectResult(Category.FOOTWEAR)
+        val result = collectResult(Category.OTHER)
 
         assertNotNull(result)
         assertNotNull(result.id)
@@ -111,7 +111,7 @@ class OfflineModeTest {
     fun `offline result has authenticity score 50 — neutral uncertainty`() = runTest {
         whenever(scanDao.insertScan(any())).thenReturn(Unit)
 
-        val result = collectResult(Category.ACCESSORIES)
+        val result = collectResult(Category.OTHER)
 
         assertEquals(50f, result.authenticityScore, 0.01f)
     }
@@ -124,7 +124,7 @@ class OfflineModeTest {
         var scanResult: com.example.fakeproductdetector.domain.model.ScanResult? = null
         flow.collect { event ->
             if (event is com.example.fakeproductdetector.domain.model.ScanEvent.Result) {
-                scanResult = event.result
+                scanResult = event.scanResult
             }
         }
 
@@ -174,7 +174,7 @@ class OfflineModeTest {
         var result: com.example.fakeproductdetector.domain.model.ScanResult? = null
         repository.scanProduct("file:///img.jpg", null, category).collect { event ->
             if (event is com.example.fakeproductdetector.domain.model.ScanEvent.Result) {
-                result = event.result
+                result = event.scanResult
             }
         }
         return checkNotNull(result) { "No ScanResult emitted from offline flow" }
