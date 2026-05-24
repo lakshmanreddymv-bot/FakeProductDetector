@@ -6,7 +6,7 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?logo=kotlin&logoColor=white)
 ![Android](https://img.shields.io/badge/Android-API%2026+-3DDC84?logo=android&logoColor=white)
-![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-API-4285F4?logo=google&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini_3.5_Flash-API-4285F4?logo=google&logoColor=white)
 ![Claude](https://img.shields.io/badge/Claude_Haiku_4.5-API-D97757?logo=anthropic&logoColor=white)
 
 ---
@@ -24,7 +24,7 @@ An AI-powered Android app that detects counterfeit products using **dual-AI veri
 
 - **CameraX live preview** — real-time camera feed with ML Kit barcode overlay
 - **ML Kit barcode scanning** — on-device, instant, free, works offline
-- **Gemini 2.5 Flash Vision** — analyzes product packaging visually (text, logos, fonts, print quality)
+- **Gemini 3.5 Flash Vision** — analyzes product packaging visually (text, logos, fonts, print quality)
 - **Claude Haiku 4.5 verification** — cross-validates Gemini's reasoning for a refined verdict
 - **Authenticity score 0–100** — clear verdict: `AUTHENTIC`, `SUSPICIOUS`, or `LIKELY_FAKE`
 - **Red flag detection** — specific concerns flagged (mismatched labels, blurry print, wrong fonts, etc.)
@@ -46,7 +46,7 @@ flowchart LR
     ML --> VAL{Scan\nValidation}
     VAL -->|plain object\nno barcode\ncategory=OTHER| WARN[Warning Dialog]
     WARN -->|Scan Anyway| GEM
-    VAL -->|packaged product\nor category set| GEM[Gemini 2.5 Flash\nVision Analysis]
+    VAL -->|packaged product\nor category set| GEM[Gemini 3.5 Flash\nVision Analysis]
     GEM --> CLU[Claude Haiku\nCross-Verification]
     CLU --> RES([Result])
     RES --> TTS[TTS\nVoice Output]
@@ -63,7 +63,7 @@ flowchart LR
 
 1. **ML Kit** reads any barcode in the live camera frame in real-time before you tap Capture.
 2. **Scan Validation** checks before proceeding — if no barcode is detected and category is OTHER, a warning dialog is shown to prevent meaningless scans.
-3. **Gemini 2.5 Flash** receives the captured JPEG and analyzes packaging visually — logos, text, fonts, print quality, barcode data.
+3. **Gemini 3.5 Flash** receives the captured JPEG and analyzes packaging visually — logos, text, fonts, print quality, barcode data.
 4. **Claude Haiku** receives Gemini's text analysis (no image) and cross-checks the reasoning for a refined final verdict.
 5. **TTS** reads the result aloud. If Claude fails, Gemini's result is used directly — the app never crashes.
 
@@ -193,7 +193,7 @@ FakeProductDetector/
 
 ### ML Kit vs Gemini vs Claude
 
-| | ML Kit | Gemini 2.5 Flash | Claude Haiku |
+| | ML Kit | Gemini 3.5 Flash | Claude Haiku |
 |---|---|---|---|
 | **Role** | Barcode Reader | Vision Scanner | Verifier |
 | **When runs** | Every live frame | Once on capture | After Gemini |
@@ -205,7 +205,7 @@ FakeProductDetector/
 
 ### Gemini vs Claude
 
-| | Gemini 2.5 Flash | Claude Haiku |
+| | Gemini 3.5 Flash | Claude Haiku |
 |---|---|---|
 | **Role** | The Scanner | The Verifier |
 | **Can see images?** | Yes | No |
@@ -281,7 +281,7 @@ flowchart TD
 | DI | Hilt 2.59.1 |
 | Camera | CameraX 1.3.4 |
 | Barcode | ML Kit Barcode Scanning 17.3.0 |
-| AI — Vision | Google Gemini 2.5 Flash (v1beta) |
+| AI — Vision | Google Gemini 3.5 Flash (v1beta) |
 | AI — Verification | Anthropic Claude Haiku 4.5 |
 | TTS | Android TextToSpeech |
 | Networking | Retrofit 2.11.0 + OkHttp 4.12.0 |
@@ -322,7 +322,7 @@ anthropic.api.key=YOUR_ANTHROPIC_API_KEY_HERE
 
 - Visit [Google AI Studio](https://aistudio.google.com/) → Get API Key
 - Enable billing at [Google Cloud Console](https://console.cloud.google.com/billing)
-- The app uses `gemini-2.5-flash` which requires a billing-enabled project
+- The app uses `gemini-3.5-flash` which requires a billing-enabled project
 
 **Cost per scan:** Gemini + Claude together cost roughly **$0.0002** per scan (~$0.0001 each).
 
@@ -397,10 +397,10 @@ var hasCameraPermission by remember {
 - `v1/models/gemini-2.0-flash` → 404
 
 **Cause:** `gemini-2.0-flash` is no longer available to new users.
-**Fix:** Switched to `v1beta/models/gemini-2.5-flash`.
+**Fix:** Switched to `v1beta/models/gemini-3.5-flash`.
 
 ```kotlin
-@POST("v1beta/models/gemini-2.5-flash:generateContent")
+@POST("v1beta/models/gemini-3.5-flash:generateContent")
 suspend fun generateContent(@Body request: GeminiRequest): GeminiResponse
 ```
 
@@ -452,7 +452,7 @@ OkHttpClient.Builder()
 
 **Problem:** After enabling Google Cloud billing, `v1/models/gemini-2.0-flash` still returned 404.
 **Cause:** `gemini-2.0-flash` on `v1` is restricted to pre-March 2026 customers.
-**Fix:** Use `v1beta/models/gemini-2.5-flash` — available to all new billing users.
+**Fix:** Use `v1beta/models/gemini-3.5-flash` — available to all new billing users.
 
 ---
 
@@ -552,7 +552,9 @@ This is **Project 2** in a series of AI-powered Android apps:
 |---|---------|--------|-------------|
 | 1 | [MySampleApplication-AI](https://github.com/lakshmanreddymv-bot/MySampleApplication-AI) | Complete | AI assistant foundation |
 | 2 | **FakeProductDetector** | Complete | Dual-AI product authentication |
-| 3 | Coming Soon | Building | — |
+| 3 | [EnterpriseDocumentRedactor](https://github.com/lakshmanreddymv-bot/EnterpriseDocumentRedactor) | Complete | GDPR/HIPAA PII redaction, fully offline |
+| 4 | [MedicalSymptomPreScreener](https://github.com/lakshmanreddymv-bot/MedicalSymptomPreScreener) | Complete | Safety-critical AI triage |
+| 5 | [RetailSafetyMonitor](https://github.com/lakshmanreddymv-bot/RetailSafetyMonitor) | Complete | Real-time AI hazard detection |
 
 ---
 
